@@ -13,6 +13,15 @@ class MainCreateTestRequested extends MainEvent {
   const MainCreateTestRequested();
 }
 
+/// Create a managed service with the given docker image and container port.
+class MainCreateServiceRequested extends MainEvent {
+  const MainCreateServiceRequested({required this.name, required this.image, this.containerPort = 80});
+
+  final String name;
+  final String image;
+  final int containerPort;
+}
+
 /// Start a managed service/container by id.
 class MainStartRequested extends MainEvent {
   const MainStartRequested({required this.id});
