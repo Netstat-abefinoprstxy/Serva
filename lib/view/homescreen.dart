@@ -219,6 +219,9 @@ class _ServiceTile extends StatelessWidget {
 
   bool get _isRunning => service.state.toLowerCase() == 'running';
 
+  // Heuristic: LAN exposed if localUrl contains '://' and does not contain 'localhost'
+  bool get _isLanExposed => service.localUrl.contains('://') && !service.localUrl.contains('localhost');
+
   Future<void> _openUrl(BuildContext context, String url) async {
     final trimmed = url.trim();
     if (trimmed.isEmpty) return;
@@ -285,9 +288,9 @@ class _ServiceTile extends StatelessWidget {
 
           if (_isRunning)
             IconButton(
-              tooltip: 'Expose to LAN',
-              onPressed: () => bloc.add(MainExposeLanRequested(id: service.id)),
-              icon: const Icon(Icons.wifi),
+              tooltip: _isLanExposed ? 'Disable LAN access' : 'Expose to LAN',
+              onPressed: () => bloc.add(MainExposeLanRequested(id: service.id, enabled: !_isLanExposed)),
+              icon: Icon(Icons.wifi, color: _isLanExposed ? Theme.of(context).colorScheme.primary : null),
             ),
 
           if (!_isRunning)

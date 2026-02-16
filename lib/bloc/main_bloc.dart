@@ -120,7 +120,7 @@ class MainBloc extends Bloc<MainEvent, MainState> {
     emit(const MainLoading(message: 'Exposing to LAN…'));
 
     try {
-      await _api.exposeServiceLan(event.id, enabled: true);
+      await _api.exposeServiceLan(event.id, enabled: event.enabled);
       final services = await _api.listServices();
 
       final healthOk = (previous is MainLoaded) ? previous.healthOk : true;
