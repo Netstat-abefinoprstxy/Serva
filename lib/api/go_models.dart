@@ -41,6 +41,9 @@ abstract class GoService with _$GoService {
 
     /// Convenience URL for other devices on LAN (may be empty depending on host).
     @JsonKey(name: 'lanUrl') required String lanUrl,
+
+    /// Whether the service is currently exposed to the LAN.
+    @JsonKey(name: 'lanEnabled') @Default(false) bool lanEnabled,
   }) = _GoService;
 
   factory GoService.fromJson(Map<String, dynamic> json) => _$GoServiceFromJson(json);

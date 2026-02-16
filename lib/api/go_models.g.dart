@@ -21,6 +21,7 @@ _GoService _$GoServiceFromJson(Map<String, dynamic> json) => _GoService(
   port: (json['port'] as num).toInt(),
   localUrl: json['localUrl'] as String,
   lanUrl: json['lanUrl'] as String,
+  lanEnabled: json['lanEnabled'] as bool? ?? false,
 );
 
 Map<String, dynamic> _$GoServiceToJson(_GoService instance) =>
@@ -33,6 +34,7 @@ Map<String, dynamic> _$GoServiceToJson(_GoService instance) =>
       'port': instance.port,
       'localUrl': instance.localUrl,
       'lanUrl': instance.lanUrl,
+      'lanEnabled': instance.lanEnabled,
     };
 
 _GoCreateServiceResponse _$GoCreateServiceResponseFromJson(

@@ -208,8 +208,8 @@ return $default(_that.ok);case _:
 /// @nodoc
 @JsonSerializable()
 
-class _GoHealthResponse implements GoHealthResponse {
-  const _GoHealthResponse({required this.ok});
+class _GoHealthResponse extends GoHealthResponse {
+  const _GoHealthResponse({required this.ok}): super._();
   factory _GoHealthResponse.fromJson(Map<String, dynamic> json) => _$GoHealthResponseFromJson(json);
 
 @override final  bool ok;
@@ -283,7 +283,8 @@ mixin _$GoService {
  String get status;/// Host port published by sovereignd. 0 if none.
  int get port;/// Convenience URL for the same machine.
 @JsonKey(name: 'localUrl') String get localUrl;/// Convenience URL for other devices on LAN (may be empty depending on host).
-@JsonKey(name: 'lanUrl') String get lanUrl;
+@JsonKey(name: 'lanUrl') String get lanUrl;/// Whether the service is currently exposed to the LAN.
+@JsonKey(name: 'lanEnabled') bool get lanEnabled;
 /// Create a copy of GoService
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -296,16 +297,16 @@ $GoServiceCopyWith<GoService> get copyWith => _$GoServiceCopyWithImpl<GoService>
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is GoService&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.image, image) || other.image == image)&&(identical(other.state, state) || other.state == state)&&(identical(other.status, status) || other.status == status)&&(identical(other.port, port) || other.port == port)&&(identical(other.localUrl, localUrl) || other.localUrl == localUrl)&&(identical(other.lanUrl, lanUrl) || other.lanUrl == lanUrl));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is GoService&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.image, image) || other.image == image)&&(identical(other.state, state) || other.state == state)&&(identical(other.status, status) || other.status == status)&&(identical(other.port, port) || other.port == port)&&(identical(other.localUrl, localUrl) || other.localUrl == localUrl)&&(identical(other.lanUrl, lanUrl) || other.lanUrl == lanUrl)&&(identical(other.lanEnabled, lanEnabled) || other.lanEnabled == lanEnabled));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,name,image,state,status,port,localUrl,lanUrl);
+int get hashCode => Object.hash(runtimeType,id,name,image,state,status,port,localUrl,lanUrl,lanEnabled);
 
 @override
 String toString() {
-  return 'GoService(id: $id, name: $name, image: $image, state: $state, status: $status, port: $port, localUrl: $localUrl, lanUrl: $lanUrl)';
+  return 'GoService(id: $id, name: $name, image: $image, state: $state, status: $status, port: $port, localUrl: $localUrl, lanUrl: $lanUrl, lanEnabled: $lanEnabled)';
 }
 
 
@@ -316,7 +317,7 @@ abstract mixin class $GoServiceCopyWith<$Res>  {
   factory $GoServiceCopyWith(GoService value, $Res Function(GoService) _then) = _$GoServiceCopyWithImpl;
 @useResult
 $Res call({
- String id, String name, String image, String state, String status, int port,@JsonKey(name: 'localUrl') String localUrl,@JsonKey(name: 'lanUrl') String lanUrl
+ String id, String name, String image, String state, String status, int port,@JsonKey(name: 'localUrl') String localUrl,@JsonKey(name: 'lanUrl') String lanUrl,@JsonKey(name: 'lanEnabled') bool lanEnabled
 });
 
 
@@ -333,7 +334,7 @@ class _$GoServiceCopyWithImpl<$Res>
 
 /// Create a copy of GoService
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = null,Object? image = null,Object? state = null,Object? status = null,Object? port = null,Object? localUrl = null,Object? lanUrl = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = null,Object? image = null,Object? state = null,Object? status = null,Object? port = null,Object? localUrl = null,Object? lanUrl = null,Object? lanEnabled = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
@@ -343,7 +344,8 @@ as String,status: null == status ? _self.status : status // ignore: cast_nullabl
 as String,port: null == port ? _self.port : port // ignore: cast_nullable_to_non_nullable
 as int,localUrl: null == localUrl ? _self.localUrl : localUrl // ignore: cast_nullable_to_non_nullable
 as String,lanUrl: null == lanUrl ? _self.lanUrl : lanUrl // ignore: cast_nullable_to_non_nullable
-as String,
+as String,lanEnabled: null == lanEnabled ? _self.lanEnabled : lanEnabled // ignore: cast_nullable_to_non_nullable
+as bool,
   ));
 }
 
@@ -428,10 +430,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String name,  String image,  String state,  String status,  int port, @JsonKey(name: 'localUrl')  String localUrl, @JsonKey(name: 'lanUrl')  String lanUrl)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String name,  String image,  String state,  String status,  int port, @JsonKey(name: 'localUrl')  String localUrl, @JsonKey(name: 'lanUrl')  String lanUrl, @JsonKey(name: 'lanEnabled')  bool lanEnabled)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _GoService() when $default != null:
-return $default(_that.id,_that.name,_that.image,_that.state,_that.status,_that.port,_that.localUrl,_that.lanUrl);case _:
+return $default(_that.id,_that.name,_that.image,_that.state,_that.status,_that.port,_that.localUrl,_that.lanUrl,_that.lanEnabled);case _:
   return orElse();
 
 }
@@ -449,10 +451,10 @@ return $default(_that.id,_that.name,_that.image,_that.state,_that.status,_that.p
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String name,  String image,  String state,  String status,  int port, @JsonKey(name: 'localUrl')  String localUrl, @JsonKey(name: 'lanUrl')  String lanUrl)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String name,  String image,  String state,  String status,  int port, @JsonKey(name: 'localUrl')  String localUrl, @JsonKey(name: 'lanUrl')  String lanUrl, @JsonKey(name: 'lanEnabled')  bool lanEnabled)  $default,) {final _that = this;
 switch (_that) {
 case _GoService():
-return $default(_that.id,_that.name,_that.image,_that.state,_that.status,_that.port,_that.localUrl,_that.lanUrl);case _:
+return $default(_that.id,_that.name,_that.image,_that.state,_that.status,_that.port,_that.localUrl,_that.lanUrl,_that.lanEnabled);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -469,10 +471,10 @@ return $default(_that.id,_that.name,_that.image,_that.state,_that.status,_that.p
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String name,  String image,  String state,  String status,  int port, @JsonKey(name: 'localUrl')  String localUrl, @JsonKey(name: 'lanUrl')  String lanUrl)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String name,  String image,  String state,  String status,  int port, @JsonKey(name: 'localUrl')  String localUrl, @JsonKey(name: 'lanUrl')  String lanUrl, @JsonKey(name: 'lanEnabled')  bool lanEnabled)?  $default,) {final _that = this;
 switch (_that) {
 case _GoService() when $default != null:
-return $default(_that.id,_that.name,_that.image,_that.state,_that.status,_that.port,_that.localUrl,_that.lanUrl);case _:
+return $default(_that.id,_that.name,_that.image,_that.state,_that.status,_that.port,_that.localUrl,_that.lanUrl,_that.lanEnabled);case _:
   return null;
 
 }
@@ -483,8 +485,8 @@ return $default(_that.id,_that.name,_that.image,_that.state,_that.status,_that.p
 /// @nodoc
 @JsonSerializable()
 
-class _GoService implements GoService {
-  const _GoService({required this.id, required this.name, required this.image, required this.state, required this.status, required this.port, @JsonKey(name: 'localUrl') required this.localUrl, @JsonKey(name: 'lanUrl') required this.lanUrl});
+class _GoService extends GoService {
+  const _GoService({required this.id, required this.name, required this.image, required this.state, required this.status, required this.port, @JsonKey(name: 'localUrl') required this.localUrl, @JsonKey(name: 'lanUrl') required this.lanUrl, @JsonKey(name: 'lanEnabled') this.lanEnabled = false}): super._();
   factory _GoService.fromJson(Map<String, dynamic> json) => _$GoServiceFromJson(json);
 
 @override final  String id;
@@ -500,6 +502,8 @@ class _GoService implements GoService {
 @override@JsonKey(name: 'localUrl') final  String localUrl;
 /// Convenience URL for other devices on LAN (may be empty depending on host).
 @override@JsonKey(name: 'lanUrl') final  String lanUrl;
+/// Whether the service is currently exposed to the LAN.
+@override@JsonKey(name: 'lanEnabled') final  bool lanEnabled;
 
 /// Create a copy of GoService
 /// with the given fields replaced by the non-null parameter values.
@@ -514,16 +518,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _GoService&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.image, image) || other.image == image)&&(identical(other.state, state) || other.state == state)&&(identical(other.status, status) || other.status == status)&&(identical(other.port, port) || other.port == port)&&(identical(other.localUrl, localUrl) || other.localUrl == localUrl)&&(identical(other.lanUrl, lanUrl) || other.lanUrl == lanUrl));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _GoService&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.image, image) || other.image == image)&&(identical(other.state, state) || other.state == state)&&(identical(other.status, status) || other.status == status)&&(identical(other.port, port) || other.port == port)&&(identical(other.localUrl, localUrl) || other.localUrl == localUrl)&&(identical(other.lanUrl, lanUrl) || other.lanUrl == lanUrl)&&(identical(other.lanEnabled, lanEnabled) || other.lanEnabled == lanEnabled));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,name,image,state,status,port,localUrl,lanUrl);
+int get hashCode => Object.hash(runtimeType,id,name,image,state,status,port,localUrl,lanUrl,lanEnabled);
 
 @override
 String toString() {
-  return 'GoService(id: $id, name: $name, image: $image, state: $state, status: $status, port: $port, localUrl: $localUrl, lanUrl: $lanUrl)';
+  return 'GoService(id: $id, name: $name, image: $image, state: $state, status: $status, port: $port, localUrl: $localUrl, lanUrl: $lanUrl, lanEnabled: $lanEnabled)';
 }
 
 
@@ -534,7 +538,7 @@ abstract mixin class _$GoServiceCopyWith<$Res> implements $GoServiceCopyWith<$Re
   factory _$GoServiceCopyWith(_GoService value, $Res Function(_GoService) _then) = __$GoServiceCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String name, String image, String state, String status, int port,@JsonKey(name: 'localUrl') String localUrl,@JsonKey(name: 'lanUrl') String lanUrl
+ String id, String name, String image, String state, String status, int port,@JsonKey(name: 'localUrl') String localUrl,@JsonKey(name: 'lanUrl') String lanUrl,@JsonKey(name: 'lanEnabled') bool lanEnabled
 });
 
 
@@ -551,7 +555,7 @@ class __$GoServiceCopyWithImpl<$Res>
 
 /// Create a copy of GoService
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = null,Object? image = null,Object? state = null,Object? status = null,Object? port = null,Object? localUrl = null,Object? lanUrl = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = null,Object? image = null,Object? state = null,Object? status = null,Object? port = null,Object? localUrl = null,Object? lanUrl = null,Object? lanEnabled = null,}) {
   return _then(_GoService(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
@@ -561,7 +565,8 @@ as String,status: null == status ? _self.status : status // ignore: cast_nullabl
 as String,port: null == port ? _self.port : port // ignore: cast_nullable_to_non_nullable
 as int,localUrl: null == localUrl ? _self.localUrl : localUrl // ignore: cast_nullable_to_non_nullable
 as String,lanUrl: null == lanUrl ? _self.lanUrl : lanUrl // ignore: cast_nullable_to_non_nullable
-as String,
+as String,lanEnabled: null == lanEnabled ? _self.lanEnabled : lanEnabled // ignore: cast_nullable_to_non_nullable
+as bool,
   ));
 }
 
@@ -769,8 +774,8 @@ return $default(_that.id,_that.name,_that.port,_that.localUrl,_that.lanUrl);case
 /// @nodoc
 @JsonSerializable()
 
-class _GoCreateServiceResponse implements GoCreateServiceResponse {
-  const _GoCreateServiceResponse({required this.id, required this.name, required this.port, @JsonKey(name: 'localUrl') required this.localUrl, @JsonKey(name: 'lanUrl') required this.lanUrl});
+class _GoCreateServiceResponse extends GoCreateServiceResponse {
+  const _GoCreateServiceResponse({required this.id, required this.name, required this.port, @JsonKey(name: 'localUrl') required this.localUrl, @JsonKey(name: 'lanUrl') required this.lanUrl}): super._();
   factory _GoCreateServiceResponse.fromJson(Map<String, dynamic> json) => _$GoCreateServiceResponseFromJson(json);
 
 @override final  String id;
@@ -1040,8 +1045,8 @@ return $default(_that.message);case _:
 /// @nodoc
 @JsonSerializable()
 
-class _GoErrorResponse implements GoErrorResponse {
-  const _GoErrorResponse({required this.message});
+class _GoErrorResponse extends GoErrorResponse {
+  const _GoErrorResponse({required this.message}): super._();
   factory _GoErrorResponse.fromJson(Map<String, dynamic> json) => _$GoErrorResponseFromJson(json);
 
 @override final  String message;

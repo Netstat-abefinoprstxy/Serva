@@ -219,8 +219,8 @@ class _ServiceTile extends StatelessWidget {
 
   bool get _isRunning => service.state.toLowerCase() == 'running';
 
-  // Heuristic: LAN exposed if localUrl contains '://' and does not contain 'localhost'
-  bool get _isLanExposed => service.localUrl.contains('://') && !service.localUrl.contains('localhost');
+  // Authoritative: provided by the daemon
+  bool get _isLanExposed => service.lanEnabled;
 
   Future<void> _openUrl(BuildContext context, String url) async {
     final trimmed = url.trim();
@@ -257,16 +257,19 @@ class _ServiceTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('${service.image} • ${service.status}'),
-          if (service.localUrl.trim().isNotEmpty)
+          if (service.lanEnabled && service.lanUrl.trim().isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: InkWell(
-                onTap: () => _openUrl(context, service.localUrl),
+                onTap: () => _openUrl(context, service.lanUrl),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 2),
                   child: Text(
-                    service.localUrl,
-                    style: theme.textTheme.bodySmall?.copyWith(decoration: TextDecoration.underline),
+                    service.lanUrl,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      decoration: TextDecoration.underline,
+                      color: theme.colorScheme.primary,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
