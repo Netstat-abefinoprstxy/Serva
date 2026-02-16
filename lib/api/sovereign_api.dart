@@ -104,8 +104,9 @@ class SovereignApi {
 
   /// POST /services/expose-lan?id=...
   /// Makes the service accessible on the local network (LAN).
-  Future<void> exposeServiceLan(String id) async {
-    final res = await http.post(_u('/services/expose-lan', {'id': id}));
+  Future<void> exposeServiceLan(String id, {bool enabled = true}) async {
+    final res = await http.post(_u('/services/expose-lan', {'id': id, 'enabled': enabled ? '1' : '0'}));
+
     if (res.statusCode >= 400) {
       throw Exception('Expose LAN failed (${res.statusCode}): ${res.body}');
     }
