@@ -11,6 +11,7 @@ class MainBloc extends Bloc<MainEvent, MainState> {
     on<MainCreateServiceRequested>(_onCreateService);
     on<MainStartRequested>(_onStart);
     on<MainStopRequested>(_onStop);
+    on<MainExposeLanRequested>(_onExposeLan);
 
     // Kick off an initial load.
     add(const MainLoadRequested());
@@ -110,6 +111,29 @@ class MainBloc extends Bloc<MainEvent, MainState> {
         emit(MainLoaded(services: previous.services, healthOk: previous.healthOk, lastMessage: 'Stop failed: $e'));
         return;
       }
+      emit(MainError(message: e.toString()));
+    }
+  }
+
+  Future<void> _onExposeLan(MainExposeLanRequested event, Emitter<MainState> emit) async {
+    final previous = state;
+    emit(const MainLoading(message: 'Exposing to LAN…'));
+
+    try {
+      await _api.exposeServiceLan(event.id);
+      final services = await _api.listServices();
+
+      final healthOk = (previous is MainLoaded) ? previous.healthOk : true;
+
+      emit(MainLoaded(services: services, healthOk: healthOk, lastMessage: 'Service exposed to LAN.'));
+    } catch (e) {
+      if (previous is MainLoaded) {
+        emit(
+          MainLoaded(services: previous.services, healthOk: previous.healthOk, lastMessage: 'Expose to LAN failed: $e'),
+        );
+        return;
+      }
+
       emit(MainError(message: e.toString()));
     }
   }

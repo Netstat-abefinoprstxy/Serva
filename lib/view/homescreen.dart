@@ -282,6 +282,14 @@ class _ServiceTile extends StatelessWidget {
               onPressed: () => _openUrl(context, service.localUrl),
               icon: const Icon(Icons.open_in_new),
             ),
+
+          if (_isRunning)
+            IconButton(
+              tooltip: 'Expose to LAN',
+              onPressed: () => bloc.add(MainExposeLanRequested(id: service.id)),
+              icon: const Icon(Icons.wifi),
+            ),
+
           if (!_isRunning)
             IconButton(
               tooltip: 'Start',
