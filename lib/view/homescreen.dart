@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:sovereign/api/go_models.dart';
 import 'dart:math';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/services.dart';
 
 import '../bloc/main_bloc.dart';
 import '../bloc/main_event.dart';
@@ -325,6 +326,91 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
 
   int _selectedTemplate = 0;
 
+  String _suggestNameFromImage(String image) {
+    // Take the last path segment, strip tag/digest.
+    var base = image.trim();
+    if (base.isEmpty) return 'service';
+
+    // Remove any leading command fragments just in case.
+    base = base.replaceAll(RegExp(r'^docker\s+pull\s+', caseSensitive: false), '').trim();
+
+    // Trim quotes.
+    if ((base.startsWith('"') && base.endsWith('"')) || (base.startsWith("'") && base.endsWith("'"))) {
+      base = base.substring(1, base.length - 1);
+    }
+
+    // Strip registry path to last segment.
+    final slash = base.lastIndexOf('/');
+    if (slash >= 0 && slash < base.length - 1) {
+      base = base.substring(slash + 1);
+    }
+
+    // Strip tag or digest.
+    final colon = base.indexOf(':');
+    if (colon > 0) base = base.substring(0, colon);
+    final at = base.indexOf('@');
+    if (at > 0) base = base.substring(0, at);
+
+    // Sanitize.
+    base = base.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-');
+    base = base.replaceAll(RegExp(r'^-+|-+$'), '');
+    if (base.isEmpty) base = 'service';
+
+    final suffix = Random().nextInt(9000) + 1000;
+    return '$base-$suffix';
+  }
+
+  String? _extractImageFromPaste(String input) {
+    var s = input.trim();
+    if (s.isEmpty) return null;
+
+    // Common copy/paste from docs or Docker Desktop buttons.
+    // Support: `docker pull <image>`
+    final pull = RegExp(r'\bdocker\s+pull\s+([^\s]+)', caseSensitive: false);
+    final pullMatch = pull.firstMatch(s);
+    if (pullMatch != null) {
+      return pullMatch.group(1)?.trim();
+    }
+
+    // If user pastes just an image name, accept it.
+    // Basic heuristic: contains a slash or colon tag, and no spaces.
+    if (!s.contains(' ') && (s.contains('/') || s.contains(':'))) {
+      return s;
+    }
+
+    return null;
+  }
+
+  Future<void> _openDockerHubSearch() async {
+    final uri = Uri.parse('https://hub.docker.com/search');
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open Docker Hub')));
+    }
+  }
+
+  Future<void> _pasteImageOrCommand() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text ?? '';
+
+    final image = _extractImageFromPaste(text);
+    if (image == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Clipboard does not look like an image or `docker pull <image>` command.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _imageCtrl.text = image;
+      // If the name looks like it came from a template, keep it; otherwise auto-suggest.
+      if (_nameCtrl.text.trim().isEmpty) {
+        _nameCtrl.text = _suggestNameFromImage(image);
+      }
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -374,7 +460,21 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Create service', style: Theme.of(context).textTheme.titleLarge),
+          Row(
+            children: [
+              Expanded(child: Text('Create service', style: Theme.of(context).textTheme.titleLarge)),
+              IconButton(
+                tooltip: 'Docker Hub',
+                onPressed: _openDockerHubSearch,
+                icon: const Icon(Icons.travel_explore),
+              ),
+              IconButton(
+                tooltip: 'Paste image/command',
+                onPressed: _pasteImageOrCommand,
+                icon: const Icon(Icons.content_paste),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
 
           Text('Template', style: Theme.of(context).textTheme.titleSmall),
@@ -410,7 +510,10 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _imageCtrl,
-                  decoration: const InputDecoration(labelText: 'Image', hintText: 'e.g. nginx:alpine'),
+                  decoration: const InputDecoration(
+                    labelText: 'Image',
+                    hintText: 'e.g. nginx:alpine  (or paste: docker pull mcp/grafana)',
+                  ),
                   textInputAction: TextInputAction.next,
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'Image is required' : null,
                 ),
