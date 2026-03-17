@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p;
 
 import 'view/homepage.dart';
 
@@ -8,7 +7,7 @@ Process? _backendProcess;
 
 /// Starts sovereignd.exe if it's not already running
 Future<void> _startBackendIfNeeded() async {
-  const port = 5055;
+  const port = 8080;
 
   // Simple health check first
   try {
@@ -25,18 +24,26 @@ Future<void> _startBackendIfNeeded() async {
   }
 
   final exeDir = File(Platform.resolvedExecutable).parent.path;
-  final backendPath = p.join(exeDir, 'sovereignd.exe');
+  final backendPath = '$exeDir${Platform.pathSeparator}sovereignd.exe';
 
   if (!File(backendPath).existsSync()) {
-    throw Exception('Backend not found at $backendPath');
+    debugPrint(
+      'sovereignd.exe not found at $backendPath; skipping auto-start.',
+    );
+    return;
   }
 
-  _backendProcess = await Process.start(
-    backendPath,
-    ['--port', '$port'], // remove if your Go app doesn't use args
-    mode: ProcessStartMode.detachedWithStdio,
-    workingDirectory: exeDir,
-  );
+  try {
+    _backendProcess = await Process.start(
+      backendPath,
+      const [],
+      mode: ProcessStartMode.detachedWithStdio,
+      workingDirectory: exeDir,
+    );
+  } on ProcessException catch (error) {
+    debugPrint('Failed to start sovereignd.exe: $error');
+    return;
+  }
 
   // Optional logging during development
   _backendProcess!.stdout.transform(SystemEncoding().decoder).listen(print);
