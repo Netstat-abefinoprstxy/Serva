@@ -11,6 +11,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../bloc/main_bloc.dart';
 import '../bloc/main_event.dart';
 import '../bloc/main_state.dart';
+import 'dashboard_screen.dart';
+import 'template_gallery_screen.dart';
 
 const _dockerDesktopStoreUrl = 'https://apps.microsoft.com/detail/xp8cbj40xlbwkx?hl=en-GB&gl=GB';
 const _virtualizationHelpUrl =
@@ -22,9 +24,49 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return _HomeTabbedShell(onCreateService: () => _showCreateServiceSheet(context));
+  }
+
+  void _showCreateServiceSheet(BuildContext context) {
+    final bloc = context.read<MainBloc>();
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _CreateServiceSheet(bloc: bloc),
+    );
+  }
+}
+
+class _HomeTabbedShell extends StatefulWidget {
+  const _HomeTabbedShell({required this.onCreateService});
+
+  final VoidCallback onCreateService;
+
+  @override
+  State<_HomeTabbedShell> createState() => _HomeTabbedShellState();
+}
+
+class _HomeTabbedShellState extends State<_HomeTabbedShell> {
+  int _currentIndex = 0;
+
+  String get _title {
+    switch (_currentIndex) {
+      case 0:
+        return 'Serva Dashboard';
+      case 1:
+        return 'Quick Launch';
+      default:
+        return 'Serva Services';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Serva'),
+        title: Text(_title),
         actions: [
           IconButton(
             tooltip: 'Refresh',
@@ -40,7 +82,7 @@ class HomeScreen extends StatelessWidget {
           }
 
           if (state is MainLoading) {
-            return _LoadingView(message: state.message);
+            return const _LoadingView(message: 'Loading your control plane...');
           }
 
           if (state is MainError) {
@@ -51,9 +93,18 @@ class HomeScreen extends StatelessWidget {
           }
 
           if (state is MainLoaded) {
-            return _LoadedView(
-              state: state,
-              onCreateService: () => _showCreateServiceSheet(context),
+            final pages = [
+              DashboardScreen(state: state),
+              const TemplateGalleryScreen(),
+              _LoadedView(
+                state: state,
+                onCreateService: widget.onCreateService,
+              ),
+            ];
+
+            return IndexedStack(
+              index: _currentIndex,
+              children: pages,
             );
           }
 
@@ -61,21 +112,35 @@ class HomeScreen extends StatelessWidget {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showCreateServiceSheet(context),
+        onPressed: widget.onCreateService,
         icon: const Icon(Icons.add),
         label: const Text('Create service'),
       ),
-    );
-  }
-
-  void _showCreateServiceSheet(BuildContext context) {
-    final bloc = context.read<MainBloc>();
-
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => _CreateServiceSheet(bloc: bloc),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.space_dashboard_rounded),
+            selectedIcon: Icon(Icons.space_dashboard),
+            label: 'Dashboard',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.grid_view_rounded),
+            selectedIcon: Icon(Icons.grid_view),
+            label: 'Launch',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.widgets_outlined),
+            selectedIcon: Icon(Icons.widgets_rounded),
+            label: 'Services',
+          ),
+        ],
+      ),
     );
   }
 }
