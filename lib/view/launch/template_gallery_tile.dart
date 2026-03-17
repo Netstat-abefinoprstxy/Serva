@@ -118,6 +118,9 @@ class _TemplateTile extends StatelessWidget {
                   runSpacing: 6,
                   children: [
                     _MetaPill(label: 'Port ${template.port}'),
+                    ...template.comparableTo
+                        .where((comparison) => comparison.trim().isNotEmpty)
+                        .map((comparison) => _MetaPill(label: 'Like $comparison')),
                     const _MetaPill(label: 'Persistent'),
                   ],
                 ),
@@ -151,6 +154,8 @@ class _TemplateTile extends StatelessWidget {
     final bloc = context.read<MainBloc>();
     final launchConfig = await _showTemplateLaunchFlow(context, template);
     if (launchConfig == null || !context.mounted) return;
+    await _prepareTemplateFiles(template, launchConfig);
+    if (!context.mounted) return;
 
     bloc.add(
       MainCreateServiceRequested(

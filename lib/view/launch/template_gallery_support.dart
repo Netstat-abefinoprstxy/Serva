@@ -4,6 +4,9 @@ bool _isVerifiedTemplate(_TemplateCardModel template) {
   return template.name == 'navidrome' ||
       template.name == 'uptime-kuma' ||
       template.name == 'jellyfin' ||
+      template.name == 'nextcloud' ||
+      template.name == 'element' ||
+      template.name == 'focalboard' ||
       template.name == 'sovereignd-test';
 }
 
@@ -60,6 +63,9 @@ List<String> _defaultMountTargetsForTemplate(String templateName) {
       break;
     case 'jellyfin':
       targets = ['/config', '/cache', '/media'];
+      break;
+    case 'element':
+      targets = ['/config'];
       break;
     case 'gitea':
       targets = ['/data'];

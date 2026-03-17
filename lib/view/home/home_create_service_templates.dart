@@ -14,6 +14,7 @@ const List<_CreateServiceTemplate> _createServiceTemplates = [
   (label: 'Outline (Docs/Notion Alternative)', name: 'outline', image: 'outlinewiki/outline:latest', port: 3000),
   (label: 'Umami (Analytics Alternative)', name: 'umami', image: 'ghcr.io/umami-software/umami:latest', port: 3000),
   (label: 'Whoogle (Private Search)', name: 'whoogle', image: 'benbusby/whoogle-search:latest', port: 5000),
+  (label: 'Element (Matrix Client)', name: 'element', image: 'tiredofit/element:0.6.59', port: 80),
   (label: 'Focalboard (Project Management)', name: 'focalboard', image: 'mattermost/focalboard:latest', port: 8000),
   (label: 'Mattermost (Chat Alternative)', name: 'mattermost', image: 'mattermost/mattermost-team-edition:latest', port: 8065),
   (label: 'Gitea (Git Server)', name: 'gitea', image: 'gitea/gitea:latest', port: 3000),
