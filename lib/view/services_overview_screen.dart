@@ -635,11 +635,12 @@ class _ActiveServiceTile extends StatelessWidget {
             ),
             const SizedBox(height: 4),
           ],
-          Row(
+          Wrap(
+            spacing: 16,
+            runSpacing: 4,
             children: [
               _ServiceMeta(label: 'Port', value: service.port > 0 ? '${service.port}' : 'none'),
-              const SizedBox(width: 16),
-              Expanded(child: _ServiceMeta(label: 'Status', value: service.status)),
+              _ServiceMeta(label: 'Status', value: service.status),
             ],
           ),
         ],
@@ -697,11 +698,22 @@ class _InactiveServiceTile extends StatelessWidget {
           const SizedBox(height: 4),
           Text(definition.image, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.66))),
           const Spacer(),
-          Row(
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
             children: [
-              Expanded(child: _CompactActionChip(label: 'Restore', icon: Icons.restore_rounded, color: const Color(0xFF80ED99), onTap: () => bloc.add(MainRecreateRequested(id: definition.id)))),
-              const SizedBox(width: 6),
-              Expanded(child: _CompactActionChip(label: 'Delete', icon: Icons.delete_outline_rounded, color: const Color(0xFFFF7B72), onTap: () => _confirmDelete(context, bloc))),
+              _CompactActionChip(
+                label: 'Restore',
+                icon: Icons.restore_rounded,
+                color: const Color(0xFF80ED99),
+                onTap: () => bloc.add(MainRecreateRequested(id: definition.id)),
+              ),
+              _CompactActionChip(
+                label: 'Delete',
+                icon: Icons.delete_outline_rounded,
+                color: const Color(0xFFFF7B72),
+                onTap: () => _confirmDelete(context, bloc),
+              ),
             ],
           ),
         ],
@@ -832,7 +844,17 @@ class _ActionChip extends StatelessWidget {
             children: [
               Icon(icon, size: 15, color: color),
               const SizedBox(width: 4),
-              Text(label, style: theme.textTheme.labelMedium?.copyWith(color: color, fontWeight: FontWeight.w700)),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -976,56 +998,47 @@ class _DataTile extends StatelessWidget {
           ),
           const Spacer(),
           if (_miscRoot != null) ...[
-            Row(
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
               children: [
-                Expanded(
-                child: _CompactActionChip(
-                    label: 'New folder',
-                    icon: Icons.create_new_folder_rounded,
-                    color: const Color(0xFF80ED99),
-                    onTap: () => _createMiscSubfolder(context, bloc, _miscRoot!),
-                  ),
+                _CompactActionChip(
+                  label: 'New folder',
+                  icon: Icons.create_new_folder_rounded,
+                  color: const Color(0xFF80ED99),
+                  onTap: () => _createMiscSubfolder(context, bloc, _miscRoot!),
                 ),
-                const SizedBox(width: 6),
-                Expanded(
-                child: _CompactActionChip(
-                    label: 'Delete folder',
-                    icon: Icons.folder_delete_rounded,
-                    color: const Color(0xFFFFC857),
-                    onTap: () => _deleteMiscSubfolder(context, bloc, _miscRoot!),
-                  ),
+                _CompactActionChip(
+                  label: 'Delete folder',
+                  icon: Icons.folder_delete_rounded,
+                  color: const Color(0xFFFFC857),
+                  onTap: () => _deleteMiscSubfolder(context, bloc, _miscRoot!),
                 ),
               ],
             ),
             const SizedBox(height: 6),
           ],
-          Row(
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
             children: [
-              Expanded(
-                child: _CompactActionChip(
-                  label: 'Open folder',
-                  icon: Icons.folder_open_rounded,
-                  color: const Color(0xFF4CC9F0),
-                  onTap: () => _openDirectory(context, entry.rootPath),
-                ),
+              _CompactActionChip(
+                label: 'Open folder',
+                icon: Icons.folder_open_rounded,
+                color: const Color(0xFF4CC9F0),
+                onTap: () => _openDirectory(context, entry.rootPath),
               ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: _CompactActionChip(
-                  label: 'Wipe',
-                  icon: Icons.cleaning_services_rounded,
-                  color: const Color(0xFFFFC857),
-                  onTap: () => _confirmWipe(context, bloc),
-                ),
+              _CompactActionChip(
+                label: 'Wipe',
+                icon: Icons.cleaning_services_rounded,
+                color: const Color(0xFFFFC857),
+                onTap: () => _confirmWipe(context, bloc),
               ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: _CompactActionChip(
-                  label: 'Delete',
-                  icon: Icons.delete_forever_rounded,
-                  color: const Color(0xFFFF7B72),
-                  onTap: () => _confirmDelete(context, bloc),
-                ),
+              _CompactActionChip(
+                label: 'Delete',
+                icon: Icons.delete_forever_rounded,
+                color: const Color(0xFFFF7B72),
+                onTap: () => _confirmDelete(context, bloc),
               ),
             ],
           ),
@@ -1332,20 +1345,21 @@ class _CompactActionChip extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(999),
         child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(999),
             border: Border.all(color: color.withValues(alpha: 0.18)),
           ),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 14, color: color),
-              const SizedBox(width: 4),
-              Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelMedium?.copyWith(color: color, fontWeight: FontWeight.w700))),
+              Icon(icon, size: 13, color: color),
+              const SizedBox(width: 3),
+              Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelMedium?.copyWith(fontSize: 12, color: color, fontWeight: FontWeight.w700))),
             ],
           ),
         ),
@@ -1366,9 +1380,24 @@ class _ServiceMeta extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label.toUpperCase(), style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.58), letterSpacing: 1)),
+        Text(
+          label.toUpperCase(),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.58),
+            letterSpacing: 1,
+          ),
+        ),
         const SizedBox(height: 3),
-        Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+        Text(
+          value,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ],
     );
   }

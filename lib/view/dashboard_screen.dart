@@ -1349,7 +1349,7 @@ class _HeroPanel extends StatelessWidget {
                 ? 'Backend reachable and ready.'
                 : 'Docker or the backend needs attention.',
             style: theme.textTheme.bodySmall?.copyWith(
-              fontSize: (theme.textTheme.bodySmall?.fontSize ?? 12) * scale,
+              fontSize: (theme.textTheme.bodySmall?.fontSize ?? 16) * scale,
               color: theme.colorScheme.onSurface.withValues(alpha: 0.74),
             ),
           ),
@@ -1485,13 +1485,19 @@ class _StatCard extends StatelessWidget {
                 ),
                 child: Icon(icon, color: color),
               ),
-              const Spacer(),
-              Text(
-                label.toUpperCase(),
-                style: theme.textTheme.labelMedium?.copyWith(
-                  fontSize: (theme.textTheme.labelMedium?.fontSize ?? 11) * scale,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.68),
-                  letterSpacing: 1.1,
+              SizedBox(width: 8 * scale),
+              Expanded(
+                child: Text(
+                  label.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontSize:
+                        (theme.textTheme.labelMedium?.fontSize ?? 16) * scale,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.68),
+                    letterSpacing: 1.1,
+                  ),
                 ),
               ),
             ],
@@ -1511,6 +1517,8 @@ class _StatCard extends StatelessWidget {
           SizedBox(height: 8 * scale),
           Text(
             value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: theme.textTheme.headlineMedium?.copyWith(
               fontSize:
                   (theme.textTheme.headlineMedium?.fontSize ?? 28) * scale,
@@ -1521,8 +1529,11 @@ class _StatCard extends StatelessWidget {
           SizedBox(height: 2 * scale),
           Text(
             caption,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: theme.textTheme.bodySmall?.copyWith(
-              fontSize: (theme.textTheme.bodySmall?.fontSize ?? 12) * scale,
+              fontSize: (theme.textTheme.bodyMedium?.fontSize ?? 18) * scale,
+              fontWeight: FontWeight.w500,
               color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
             ),
           ),
@@ -1530,8 +1541,11 @@ class _StatCard extends StatelessWidget {
             SizedBox(height: 2 * scale),
             Text(
               footer!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: theme.textTheme.bodySmall?.copyWith(
-                fontSize: (theme.textTheme.bodySmall?.fontSize ?? 12) * scale,
+                fontSize: (theme.textTheme.bodyMedium?.fontSize ?? 17) * scale,
+                fontWeight: FontWeight.w500,
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.56),
               ),
             ),
@@ -1574,7 +1588,7 @@ class _ActivityPanel extends StatelessWidget {
           Text(
             'A stylized pulse view of the services Serva is tracking right now.',
             style: theme.textTheme.bodyMedium?.copyWith(
-              fontSize: (theme.textTheme.bodyMedium?.fontSize ?? 14) * scale,
+              fontSize: (theme.textTheme.bodyMedium?.fontSize ?? 17) * scale,
               color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
             ),
           ),
@@ -1648,7 +1662,7 @@ class _ActivityRow extends StatelessWidget {
                   service.running ? 'RUNNING' : 'IDLE',
                   style: theme.textTheme.labelSmall?.copyWith(
                     fontSize:
-                        (theme.textTheme.labelSmall?.fontSize ?? 11) * scale,
+                        (theme.textTheme.labelSmall?.fontSize ?? 16) * scale,
                     color: accent,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 1,
@@ -1733,7 +1747,7 @@ class _DashboardSupportBanner extends StatelessWidget {
                       ? 'Virtualization may be required'
                       : 'Docker Desktop may be required',
                   style: theme.textTheme.titleSmall?.copyWith(
-                    fontSize: (theme.textTheme.titleSmall?.fontSize ?? 14) * scale,
+                    fontSize: (theme.textTheme.titleSmall?.fontSize ?? 17) * scale,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -1743,7 +1757,7 @@ class _DashboardSupportBanner extends StatelessWidget {
                       ? 'Docker Desktop needs virtualization enabled to run. You may need to enable virtualization in Windows and in your BIOS/UEFI settings.'
                       : 'Serva could not reach Docker Desktop. Install it or make sure it is running, then refresh the dashboard.',
                   style: theme.textTheme.bodySmall?.copyWith(
-                    fontSize: (theme.textTheme.bodySmall?.fontSize ?? 12) * scale,
+                    fontSize: (theme.textTheme.bodySmall?.fontSize ?? 16) * scale,
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.76),
                   ),
                 ),
@@ -1752,7 +1766,7 @@ class _DashboardSupportBanner extends StatelessWidget {
                   Text(
                     message,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      fontSize: (theme.textTheme.bodySmall?.fontSize ?? 12) * scale,
+                      fontSize: (theme.textTheme.bodySmall?.fontSize ?? 16) * scale,
                       color: theme.colorScheme.onSurface.withValues(
                         alpha: 0.56,
                       ),
@@ -1845,15 +1859,15 @@ class _MissionPanel extends StatelessWidget {
           Text(
             'Mission profile',
             style: theme.textTheme.titleLarge?.copyWith(
-              fontSize: (theme.textTheme.titleLarge?.fontSize ?? 22) * scale,
+              fontSize: (theme.textTheme.titleLarge?.fontSize ?? 24) * scale,
               fontWeight: FontWeight.w700,
             ),
           ),
           SizedBox(height: 6 * scale),
           Center(
             child: SizedBox(
-              width: 92 * scale,
-              height: 92 * scale,
+              width: 138 * scale,
+              height: 138 * scale,
               child: CustomPaint(
                 painter: _GaugePainter(value: readinessScore / 100),
                 child: Center(
@@ -1864,7 +1878,7 @@ class _MissionPanel extends StatelessWidget {
                         '$readinessScore%',
                         style: theme.textTheme.headlineMedium?.copyWith(
                           fontSize:
-                              (theme.textTheme.headlineMedium?.fontSize ?? 28) *
+                              (theme.textTheme.headlineMedium?.fontSize ?? 36) *
                               scale,
                           fontWeight: FontWeight.w800,
                         ),
@@ -1874,7 +1888,7 @@ class _MissionPanel extends StatelessWidget {
                         'Readiness',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           fontSize:
-                              (theme.textTheme.bodyMedium?.fontSize ?? 14) * scale,
+                              (theme.textTheme.bodyMedium?.fontSize ?? 18) * scale,
                           color: theme.colorScheme.onSurface.withValues(
                             alpha: 0.72,
                           ),
@@ -1968,14 +1982,15 @@ class _ChecklistItem extends StatelessWidget {
               Text(
                 title,
                 style: theme.textTheme.titleSmall?.copyWith(
-                  fontSize: (theme.textTheme.titleSmall?.fontSize ?? 14) * scale,
+                  fontSize: (theme.textTheme.titleMedium?.fontSize ?? 19) * scale,
                 ),
               ),
               SizedBox(height: 2 * scale),
               Text(
                 subtitle,
                 style: theme.textTheme.bodySmall?.copyWith(
-                  fontSize: (theme.textTheme.bodySmall?.fontSize ?? 12) * scale,
+                  fontSize: (theme.textTheme.bodyMedium?.fontSize ?? 18) * scale,
+                  fontWeight: FontWeight.w500,
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
                 ),
               ),
@@ -2024,7 +2039,7 @@ class _MiniStatStrip extends StatelessWidget {
               label,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 fontSize:
-                    (Theme.of(context).textTheme.bodyMedium?.fontSize ?? 14) *
+                    (Theme.of(context).textTheme.bodyMedium?.fontSize ?? 17) *
                     scale,
               ),
             ),
@@ -2035,7 +2050,7 @@ class _MiniStatStrip extends StatelessWidget {
               context,
             ).textTheme.titleSmall?.copyWith(
               fontSize:
-                  (Theme.of(context).textTheme.titleSmall?.fontSize ?? 14) *
+                  (Theme.of(context).textTheme.titleSmall?.fontSize ?? 17) *
                   scale,
               fontWeight: FontWeight.w700,
             ),
@@ -2067,7 +2082,7 @@ class _InlineMetric extends StatelessWidget {
         Text(
           label.toUpperCase(),
           style: theme.textTheme.labelSmall?.copyWith(
-            fontSize: (theme.textTheme.labelSmall?.fontSize ?? 11) * scale,
+            fontSize: (theme.textTheme.labelSmall?.fontSize ?? 16) * scale,
             color: theme.colorScheme.onSurface.withValues(alpha: 0.58),
             letterSpacing: 1,
           ),
@@ -2076,7 +2091,7 @@ class _InlineMetric extends StatelessWidget {
         Text(
           value,
           style: theme.textTheme.bodyMedium?.copyWith(
-            fontSize: (theme.textTheme.bodyMedium?.fontSize ?? 14) * scale,
+            fontSize: (theme.textTheme.bodyMedium?.fontSize ?? 17) * scale,
             fontWeight: FontWeight.w600,
           ),
           overflow: TextOverflow.ellipsis,
