@@ -52,6 +52,16 @@ class _MetaPill extends StatelessWidget {
   }
 }
 
+class _TemplateSeedFile {
+  const _TemplateSeedFile({
+    required this.relativePath,
+    required this.description,
+  });
+
+  final String relativePath;
+  final String description;
+}
+
 class _TemplateCardModel {
   const _TemplateCardModel({
     required this.label,
@@ -64,6 +74,7 @@ class _TemplateCardModel {
     required this.icon,
     required this.accent,
     this.env = const [],
+    this.seedFiles = const [],
   });
 
   final String label;
@@ -76,4 +87,5 @@ class _TemplateCardModel {
   final IconData icon;
   final Color accent;
   final List<String> env;
+  final List<_TemplateSeedFile> seedFiles;
 }

@@ -58,6 +58,19 @@ class _TemplateTile extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
+                          tooltip: 'Template details',
+                          onPressed: () => _showTemplateDetailsSheet(context, template),
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                          icon: Icon(
+                            Icons.settings_outlined,
+                            size: 18,
+                            color: titleColor.withValues(alpha: 0.76),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
                           tooltip: isVerified ? 'Move to Experimental' : 'Move to Verified',
                           onPressed: () => _toggleVerified(template),
                           visualDensity: VisualDensity.compact,

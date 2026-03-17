@@ -86,6 +86,7 @@ _TemplateCardModel _customTemplateFromImage(String image) {
     port: 80,
     icon: Icons.auto_awesome_motion_rounded,
     accent: const Color(0xFFA0C4FF),
+    seedFiles: const [],
   );
 }
 

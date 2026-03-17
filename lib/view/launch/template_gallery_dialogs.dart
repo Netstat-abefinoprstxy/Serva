@@ -27,6 +27,133 @@ Future<_TemplateLaunchConfig?> _showTemplateLaunchFlow(
   );
 }
 
+Future<void> _showTemplateDetailsSheet(
+  BuildContext context,
+  _TemplateCardModel template,
+) {
+  final mountTargets = _defaultMountTargetsForTemplate(template.name);
+
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) {
+      final theme = Theme.of(context);
+      return Padding(
+        padding: EdgeInsets.only(
+          left: 12,
+          right: 12,
+          top: 12,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 12,
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: template.accent.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(template.icon, color: template.accent, size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          template.label,
+                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          template.subtitle,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _templateDetailRow(context, 'Image', template.image),
+              _templateDetailRow(context, 'Port', '${template.port}'),
+              _templateDetailRow(
+                context,
+                'Comparisons',
+                template.comparableTo.isEmpty ? 'None' : template.comparableTo.join(', '),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Mounts',
+                style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: mountTargets.map((target) => _MetaPill(label: target)).toList(),
+              ),
+              if (template.seedFiles.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Custom files',
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 6),
+                ...template.seedFiles.map(
+                  (file) => _templateDetailRow(
+                    context,
+                    file.relativePath,
+                    file.description,
+                  ),
+                ),
+              ],
+              if (template.env.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Environment',
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 6),
+                ...template.env.map((entry) => _templateDetailRow(context, 'ENV', entry)),
+              ],
+              const SizedBox(height: 12),
+              Text(
+                template.description,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.78),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Done'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
 Future<_TemplateLaunchConfig?> _showCustomImageLaunchFlow(
   BuildContext context, {
   required String image,
@@ -43,6 +170,34 @@ Future<_TemplateLaunchConfig?> _showCustomImageLaunchFlow(
       rootOverride: selectedRoot,
     ),
     env: const [],
+  );
+}
+
+Widget _templateDetailRow(BuildContext context, String label, String value) {
+  final theme = Theme.of(context);
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 92,
+          child: Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.66),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
+    ),
   );
 }
 

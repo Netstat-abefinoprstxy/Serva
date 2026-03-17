@@ -133,6 +133,12 @@ const List<_TemplateCardModel> _templateCatalog = [
     port: 80,
     icon: Icons.chat_bubble_outline_rounded,
     accent: Color(0xFF9D8DF1),
+    seedFiles: [
+      _TemplateSeedFile(
+        relativePath: 'config/config.json',
+        description: 'Serva writes a valid default Element web configuration before first launch.',
+      ),
+    ],
   ),
   _TemplateCardModel(
     label: 'Focalboard',
