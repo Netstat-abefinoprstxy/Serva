@@ -312,6 +312,7 @@ class GoServiceDefinition {
     required this.createdAt,
     required this.updatedAt,
     required this.mounts,
+    required this.env,
   });
 
   final String id;
@@ -325,6 +326,7 @@ class GoServiceDefinition {
   final String createdAt;
   final String updatedAt;
   final List<GoServiceDefinitionMount> mounts;
+  final List<String> env;
 
   bool get isDeployed => currentContainerId.trim().isNotEmpty;
 
@@ -344,6 +346,7 @@ class GoServiceDefinition {
           .whereType<Map>()
           .map((entry) => GoServiceDefinitionMount.fromJson(entry.cast<String, dynamic>()))
           .toList(),
+      env: (json['env'] as List?)?.cast<String>() ?? const [],
     );
   }
 }

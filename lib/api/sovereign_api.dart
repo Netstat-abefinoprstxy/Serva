@@ -87,6 +87,7 @@ class ServaApi {
     required String image,
     int containerPort = 80,
     List<GoServiceDefinitionMount> mounts = const [],
+    List<String> env = const [],
   }) async {
     final res = await http.post(
       _u('/services/create'),
@@ -96,6 +97,7 @@ class ServaApi {
         'image': image,
         'containerPort': containerPort,
         'mounts': mounts.map((mount) => mount.toJson()).toList(),
+        'env': env,
       }),
     );
 

@@ -158,6 +158,7 @@ class _TemplateTile extends StatelessWidget {
         image: template.image,
         containerPort: template.port,
         mounts: launchConfig.mounts,
+        env: launchConfig.env,
       ),
     );
 

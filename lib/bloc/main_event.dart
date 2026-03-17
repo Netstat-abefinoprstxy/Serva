@@ -22,12 +22,14 @@ class MainCreateServiceRequested extends MainEvent {
     required this.image,
     this.containerPort = 80,
     this.mounts = const [],
+    this.env = const [],
   });
 
   final String name;
   final String image;
   final int containerPort;
   final List<GoServiceDefinitionMount> mounts;
+  final List<String> env;
 }
 
 /// Start a managed service/container by id.

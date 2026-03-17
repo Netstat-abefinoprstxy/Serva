@@ -41,6 +41,7 @@ Future<void> _pasteImageOrCommand(BuildContext context) async {
       image: image,
       containerPort: 80,
       mounts: launchConfig.mounts,
+      env: launchConfig.env,
     ),
   );
 

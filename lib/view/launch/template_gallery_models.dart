@@ -4,10 +4,12 @@ class _TemplateLaunchConfig {
   const _TemplateLaunchConfig({
     required this.serviceName,
     required this.mounts,
+    required this.env,
   });
 
   final String serviceName;
   final List<GoServiceDefinitionMount> mounts;
+  final List<String> env;
 }
 
 class _ExistingDataOption {
@@ -60,6 +62,7 @@ class _TemplateCardModel {
     required this.port,
     required this.icon,
     required this.accent,
+    this.env = const [],
   });
 
   final String label;
@@ -70,4 +73,5 @@ class _TemplateCardModel {
   final int port;
   final IconData icon;
   final Color accent;
+  final List<String> env;
 }

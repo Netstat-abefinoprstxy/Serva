@@ -110,6 +110,7 @@ const List<_TemplateCardModel> _templateCatalog = [
     port: 5000,
     icon: Icons.travel_explore_rounded,
     accent: Color(0xFFA0C4FF),
+    env: ['WHOOGLE_HTTP2=0'],
   ),
   _TemplateCardModel(
     label: 'Focalboard',

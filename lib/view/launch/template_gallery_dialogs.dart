@@ -23,6 +23,7 @@ Future<_TemplateLaunchConfig?> _showTemplateLaunchFlow(
       serviceName,
       rootOverride: selectedRoot,
     ),
+    env: template.env,
   );
 }
 
@@ -41,6 +42,7 @@ Future<_TemplateLaunchConfig?> _showCustomImageLaunchFlow(
       serviceName,
       rootOverride: selectedRoot,
     ),
+    env: const [],
   );
 }
 
@@ -49,6 +51,7 @@ Future<_TemplateLaunchConfig?> _showLaunchFlowSheet(
   required String title,
   required String initialName,
   required List<GoServiceDefinitionMount> Function(String serviceName, String? selectedRoot) mountBuilder,
+  required List<String> env,
   String? subtitle,
   String? imageLabel,
   Widget? leadingIcon,
@@ -184,6 +187,7 @@ Future<_TemplateLaunchConfig?> _showLaunchFlowSheet(
                             _TemplateLaunchConfig(
                               serviceName: serviceName,
                               mounts: mountBuilder(serviceName, selectedRoot),
+                              env: env,
                             ),
                           );
                         },

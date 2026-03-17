@@ -123,6 +123,7 @@ class MainBloc extends Bloc<MainEvent, MainState> {
           image: event.image,
           containerPort: event.containerPort,
           mounts: event.mounts,
+          env: event.env,
         );
       },
       successMessage: 'Created ${event.name}.',
