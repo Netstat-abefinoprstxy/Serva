@@ -128,7 +128,13 @@ class _HomeTabbedShellState extends State<_HomeTabbedShell> {
               icon: const Icon(Icons.add),
               label: const Text('Create service'),
             )
-          : null,
+          : _currentIndex == 2
+              ? FloatingActionButton.extended(
+                  onPressed: () => TemplateGalleryScreen.showCreateTemplateSheet(context),
+                  icon: const Icon(Icons.auto_awesome_motion_rounded),
+                  label: const Text('Create template'),
+                )
+              : null,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) {

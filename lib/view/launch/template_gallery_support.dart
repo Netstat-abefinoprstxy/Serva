@@ -82,6 +82,21 @@ List<String> _defaultMountTargetsForTemplate(String templateName) {
   return targets;
 }
 
+List<String> _mountTargetsForTemplateCard(_TemplateCardModel template) {
+  if (template.mountTargets.isNotEmpty) {
+    final normalized = template.mountTargets
+        .map((target) => _normalizeMountTarget(target))
+        .where((target) => target.isNotEmpty)
+        .toList();
+    if (!normalized.contains('/misc')) {
+      normalized.add('/misc');
+    }
+    return normalized.toSet().toList();
+  }
+
+  return _defaultMountTargetsForTemplate(template.name);
+}
+
 List<GoServiceDefinitionMount> _defaultMountsForTemplate(
   String templateName,
   String serviceName, {
@@ -107,6 +122,36 @@ String _subfolderNameForTarget(String target) {
     return 'data';
   }
   return segments.join('-');
+}
+
+List<GoServiceDefinitionMount> _mountsForTargets(
+  List<String> targets,
+  String serviceName, {
+  String? rootOverride,
+}) {
+  final root = rootOverride ?? _defaultMountRootForName(serviceName);
+  return targets
+      .map(_normalizeMountTarget)
+      .where((target) => target.isNotEmpty)
+      .toSet()
+      .map(
+        (target) => GoServiceDefinitionMount(
+          type: 'bind',
+          source: '$root\\${_subfolderNameForTarget(target)}',
+          target: target,
+          readOnly: false,
+          managed: true,
+        ),
+      )
+      .toList();
+}
+
+String _normalizeMountTarget(String target) {
+  var value = target.trim().replaceAll('\\', '/');
+  if (value.isEmpty) return '';
+  if (!value.startsWith('/')) value = '/$value';
+  value = value.replaceAll(RegExp(r'/+'), '/');
+  return value;
 }
 
 String? _dataRootFromDefinition(GoServiceDefinition definition) {

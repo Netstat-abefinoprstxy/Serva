@@ -137,6 +137,75 @@ const List<_TemplateCardModel> _templateCatalog = [
       _TemplateSeedFile(
         relativePath: 'config/config.json',
         description: 'Serva writes a valid default Element web configuration before first launch.',
+        contents: '''{
+    "default_server_config": {
+        "m.homeserver": {
+            "base_url": "https://matrix-client.matrix.org",
+            "server_name": "matrix.org"
+        },
+        "m.identity_server": {
+            "base_url": "https://vector.im"
+        }
+    },
+    "disable_custom_urls": false,
+    "disable_guests": false,
+    "disable_login_language_selector": false,
+    "disable_3pid_login": false,
+    "brand": "Element",
+    "integrations_ui_url": "https://scalar.vector.im/",
+    "integrations_rest_url": "https://scalar.vector.im/api",
+    "integrations_widgets_urls": [
+        "https://scalar.vector.im/_matrix/integrations/v1",
+        "https://scalar.vector.im/api",
+        "https://scalar-staging.vector.im/_matrix/integrations/v1",
+        "https://scalar-staging.vector.im/api",
+        "https://scalar-staging.riot.im/scalar/api"
+    ],
+    "bug_report_endpoint_url": "https://element.io/bugreports/submit",
+    "uisi_autorageshake_app": "element-auto-uisi",
+    "default_country_code": "US",
+    "show_labs_settings": false,
+    "features": {},
+    "default_federate": true,
+    "default_theme": "light",
+    "room_directory": {
+        "servers": [
+            "matrix.org"
+        ]
+    },
+    "enable_presence_by_hs_url": {
+        "https://matrix.org": false,
+        "https://matrix-client.matrix.org": false
+    },
+    "setting_defaults": {
+        "breadcrumbs": true,
+        "MessageComposerInput.showStickersButton": false,
+        "MessageComposerInput.showPollsButton": false
+    },
+    "jitsi": {
+        "preferred_domain": "meet.element.io"
+    },
+    "jitsi_widget": {
+        "skip_built_in_welcome_screen": true
+    },
+    "voip": {
+        "obey_asserted_identity": false
+    },
+    "element_call": {
+        "url": "https://call.element.io",
+        "participant_limit": 8,
+        "brand": "Element Call",
+        "exclusive": false
+    },
+    "logout_redirect_url": null,
+    "sso_redirect_options": {
+        "immediate": false,
+        "on_welcome_page": true
+    },
+    "map_style_url": "https://api.maptiler.com/maps/streets/style.json?key=fU3vlMsMn4Jb6dnEIFsx"
+}
+''',
+        overwriteIfInvalidJson: true,
       ),
     ],
   ),

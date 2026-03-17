@@ -18,11 +18,8 @@ Future<_TemplateLaunchConfig?> _showTemplateLaunchFlow(
       ),
       child: Icon(template.icon, color: template.accent, size: 18),
     ),
-    mountBuilder: (serviceName, selectedRoot) => _defaultMountsForTemplate(
-      template.name,
-      serviceName,
-      rootOverride: selectedRoot,
-    ),
+    mountBuilder: (serviceName, selectedRoot) =>
+        _mountsForTargets(_mountTargetsForTemplateCard(template), serviceName, rootOverride: selectedRoot),
     env: template.env,
   );
 }
@@ -31,7 +28,9 @@ Future<void> _showTemplateDetailsSheet(
   BuildContext context,
   _TemplateCardModel template,
 ) {
-  final mountTargets = _defaultMountTargetsForTemplate(template.name);
+  final mountTargets = _mountTargetsForTemplateCard(template);
+  final isCustomTemplate = TemplateGalleryScreen.customTemplates.value
+      .any((entry) => _templateKey(entry) == _templateKey(template));
 
   return showModalBottomSheet<void>(
     context: context,
@@ -139,12 +138,59 @@ Future<void> _showTemplateDetailsSheet(
                 ),
               ),
               const SizedBox(height: 14),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Done'),
-                ),
+              Row(
+                children: [
+                  if (isCustomTemplate)
+                    TextButton.icon(
+                      onPressed: () async {
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (dialogContext) => AlertDialog(
+                            title: const Text('Delete template?'),
+                            content: Text(
+                              'Remove ${template.label} from Launch? '
+                              'If this template overrides a built-in preset, the built-in version will show again.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(dialogContext).pop(false),
+                                child: const Text('Cancel'),
+                              ),
+                              FilledButton(
+                                onPressed: () => Navigator.of(dialogContext).pop(true),
+                                child: const Text('Delete'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed != true || !context.mounted) return;
+                        _removeCustomTemplate(template);
+                        Navigator.of(context).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Removed ${template.label}.'),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      label: const Text('Delete'),
+                    ),
+                  if (isCustomTemplate) const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      TemplateGalleryScreen.showEditTemplateSheet(context, template);
+                    },
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Edit'),
+                  ),
+                  const Spacer(),
+                  FilledButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Done'),
+                  ),
+                ],
               ),
             ],
           ),
@@ -164,13 +210,457 @@ Future<_TemplateLaunchConfig?> _showCustomImageLaunchFlow(
     title: 'Launch pasted image',
     initialName: suggestedName,
     imageLabel: image,
-    mountBuilder: (serviceName, selectedRoot) => _defaultMountsForTemplate(
-      'custom',
-      serviceName,
-      rootOverride: selectedRoot,
-    ),
+    mountBuilder: (serviceName, selectedRoot) =>
+        _mountsForTargets(const ['/data', '/misc'], serviceName, rootOverride: selectedRoot),
     env: const [],
   );
+}
+
+Future<void> _showCreateTemplateSheet(
+  BuildContext context, {
+  _TemplateCardModel? existingTemplate,
+}) async {
+  final theme = Theme.of(context);
+  final isEditing = existingTemplate != null;
+  final imageController = TextEditingController(text: existingTemplate?.image ?? '');
+  final labelController = TextEditingController(text: existingTemplate?.label ?? '');
+  final baseNameController = TextEditingController(text: existingTemplate?.name ?? '');
+  final portController = TextEditingController(text: '${existingTemplate?.port ?? 80}');
+  final subtitleController = TextEditingController(text: existingTemplate?.subtitle ?? 'Custom Template');
+  final descriptionController = TextEditingController(text: existingTemplate?.description ?? '');
+  final comparisonController = TextEditingController();
+  final mountController = TextEditingController(text: '/data');
+  final filePathController = TextEditingController();
+  final fileDescriptionController = TextEditingController();
+  final fileContentsController = TextEditingController();
+  final mountTargets = List<String>.from(
+    (existingTemplate?.mountTargets.isNotEmpty ?? false)
+        ? existingTemplate!.mountTargets.where((target) => _normalizeMountTarget(target) != '/misc')
+        : const ['/data'],
+  );
+  final comparisonTags = List<String>.from(existingTemplate?.comparableTo ?? const []);
+  final customFiles = List<_TemplateSeedFile>.from(existingTemplate?.seedFiles ?? const []);
+
+  try {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            void addMountTarget() {
+              final normalized = _normalizeMountTarget(mountController.text);
+              if (normalized.isEmpty || normalized == '/misc' || mountTargets.contains(normalized)) return;
+              setSheetState(() {
+                mountTargets.add(normalized);
+                mountTargets.sort();
+                mountController.clear();
+              });
+            }
+
+            void addComparisonTag() {
+              final value = comparisonController.text.trim();
+              if (value.isEmpty || comparisonTags.contains(value)) return;
+              setSheetState(() {
+                comparisonTags.add(value);
+                comparisonController.clear();
+              });
+            }
+
+            void addCustomFile() {
+              final relativePath = filePathController.text.trim().replaceAll('\\', '/');
+              final description = fileDescriptionController.text.trim();
+              final contents = fileContentsController.text;
+              if (relativePath.isEmpty) return;
+              setSheetState(() {
+                customFiles.add(
+                  _TemplateSeedFile(
+                    relativePath: relativePath,
+                    description: description.isEmpty ? 'Custom file' : description,
+                    contents: contents,
+                  ),
+                );
+                filePathController.clear();
+                fileDescriptionController.clear();
+                fileContentsController.clear();
+              });
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 12,
+                right: 12,
+                top: 12,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 12,
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: theme.colorScheme.outlineVariant),
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isEditing ? 'Edit template' : 'Create template',
+                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Build a reusable Launch tile with your own image, base name, and mount layout. /misc is always included automatically.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: imageController,
+                        decoration: InputDecoration(
+                          labelText: 'Docker image',
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
+                            tooltip: 'Paste image',
+                            onPressed: () async {
+                              final data = await Clipboard.getData(Clipboard.kTextPlain);
+                              final parsed = _extractImageFromPaste(data?.text ?? '') ?? (data?.text ?? '').trim();
+                              if (parsed.isEmpty) return;
+                              setSheetState(() {
+                                imageController.text = parsed;
+                                if (labelController.text.trim().isEmpty) {
+                                  labelController.text = _titleFromImage(parsed);
+                                }
+                                if (baseNameController.text.trim().isEmpty) {
+                                  baseNameController.text = _templateNameFromImage(parsed);
+                                }
+                                if (descriptionController.text.trim().isEmpty) {
+                                  descriptionController.text = parsed;
+                                }
+                              });
+                            },
+                            icon: const Icon(Icons.content_paste_rounded),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: labelController,
+                              decoration: const InputDecoration(
+                                labelText: 'Template label',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          SizedBox(
+                            width: 110,
+                            child: TextField(
+                              controller: portController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: 'Port',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: baseNameController,
+                              decoration: const InputDecoration(
+                                labelText: 'Base name',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              controller: subtitleController,
+                              decoration: const InputDecoration(
+                                labelText: 'Category',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: descriptionController,
+                        minLines: 2,
+                        maxLines: 3,
+                        decoration: const InputDecoration(
+                          labelText: 'Description',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Mounts',
+                        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          ...mountTargets.map(
+                            (target) => InputChip(
+                              label: Text(target),
+                              onDeleted: () {
+                                setSheetState(() {
+                                  mountTargets.remove(target);
+                                });
+                              },
+                            ),
+                          ),
+                          const _MetaPill(label: '/misc (automatic)'),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: mountController,
+                              decoration: const InputDecoration(
+                                labelText: 'Add mount target',
+                                hintText: '/data',
+                                border: OutlineInputBorder(),
+                              ),
+                              onSubmitted: (_) => addMountTarget(),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          FilledButton.tonal(
+                            onPressed: addMountTarget,
+                            child: const Text('Add'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Comparison tags',
+                        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 6),
+                      if (comparisonTags.isNotEmpty)
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: comparisonTags
+                              .map(
+                                (tag) => InputChip(
+                                  label: Text(tag),
+                                  onDeleted: () {
+                                    setSheetState(() {
+                                      comparisonTags.remove(tag);
+                                    });
+                                  },
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      if (comparisonTags.isNotEmpty) const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: comparisonController,
+                              decoration: const InputDecoration(
+                                labelText: 'Add comparison',
+                                hintText: 'GitHub',
+                                border: OutlineInputBorder(),
+                              ),
+                              onSubmitted: (_) => addComparisonTag(),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          FilledButton.tonal(
+                            onPressed: addComparisonTag,
+                            child: const Text('Add'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Custom files',
+                        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 6),
+                      if (customFiles.isNotEmpty)
+                        Column(
+                          children: customFiles
+                              .asMap()
+                              .entries
+                              .map(
+                                (entry) => Container(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.surfaceContainerHigh.withValues(alpha: 0.7),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(color: theme.colorScheme.outlineVariant),
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              entry.value.relativePath,
+                                              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              entry.value.description,
+                                              style: theme.textTheme.bodySmall?.copyWith(
+                                                color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Remove file',
+                                        onPressed: () {
+                                          setSheetState(() {
+                                            customFiles.removeAt(entry.key);
+                                          });
+                                        },
+                                        icon: const Icon(Icons.delete_outline_rounded),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      TextField(
+                        controller: filePathController,
+                        decoration: const InputDecoration(
+                          labelText: 'Relative file path',
+                          hintText: 'config/config.json',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: fileDescriptionController,
+                        decoration: const InputDecoration(
+                          labelText: 'File description',
+                          hintText: 'Element web config',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: fileContentsController,
+                        minLines: 4,
+                        maxLines: 8,
+                        decoration: const InputDecoration(
+                          labelText: 'File contents',
+                          alignLabelWithHint: true,
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: FilledButton.tonal(
+                          onPressed: addCustomFile,
+                          child: const Text('Add file'),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: const Text('Cancel'),
+                          ),
+                          const Spacer(),
+                          FilledButton.icon(
+                            onPressed: () {
+                              final image = imageController.text.trim();
+                              final label = labelController.text.trim();
+                              final baseName = baseNameController.text.trim();
+                              final subtitle = subtitleController.text.trim();
+                              final description = descriptionController.text.trim();
+                              final port = int.tryParse(portController.text.trim()) ?? 80;
+
+                              if (image.isEmpty || label.isEmpty || baseName.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Image, label, and base name are required.')),
+                                );
+                                return;
+                              }
+
+                              final template = _TemplateCardModel(
+                                label: label,
+                                subtitle: subtitle.isEmpty ? 'Custom Template' : subtitle,
+                                description: description.isEmpty ? image : description,
+                                comparableTo: List<String>.from(comparisonTags),
+                                name: _templateNameFromImage(baseName),
+                                image: image,
+                                port: port <= 0 ? 80 : port,
+                                icon: Icons.auto_awesome_motion_rounded,
+                                accent: const Color(0xFFA0C4FF),
+                                env: const [],
+                                seedFiles: List<_TemplateSeedFile>.from(customFiles),
+                                mountTargets: [...mountTargets, '/misc'],
+                              );
+
+                              _registerCustomTemplate(template);
+                              Navigator.of(context).pop();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('${isEditing ? 'Updated' : 'Saved'} template ${template.label}.'),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.add_box_outlined),
+                            label: Text(isEditing ? 'Update template' : 'Save template'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  } finally {
+    imageController.dispose();
+    labelController.dispose();
+    baseNameController.dispose();
+    portController.dispose();
+    subtitleController.dispose();
+    descriptionController.dispose();
+    comparisonController.dispose();
+    mountController.dispose();
+    filePathController.dispose();
+    fileDescriptionController.dispose();
+    fileContentsController.dispose();
+  }
 }
 
 Widget _templateDetailRow(BuildContext context, String label, String value) {

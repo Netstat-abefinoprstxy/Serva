@@ -33,7 +33,7 @@ Future<void> _pasteImageOrCommand(BuildContext context) async {
   );
   if (launchConfig == null || !context.mounted) return;
 
-  _registerCustomTemplate(image);
+  _registerCustomTemplate(_customTemplateFromImage(image));
 
   bloc.add(
     MainCreateServiceRequested(

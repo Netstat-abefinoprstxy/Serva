@@ -12,14 +12,27 @@ extension _TemplateGalleryPersistence on _TemplateGalleryScreenState {
       final decoded = jsonDecode(raw);
       if (decoded is! List) return;
 
-      final images = decoded
-          .whereType<String>()
-          .map((value) => value.trim())
-          .where((value) => value.isNotEmpty)
-          .toSet()
-          .toList();
+      final templates = <_TemplateCardModel>[];
+      for (final entry in decoded) {
+        if (entry is String) {
+          final image = entry.trim();
+          if (image.isNotEmpty) {
+            templates.add(_customTemplateFromImage(image));
+          }
+        } else if (entry is Map) {
+          final mapped = entry.cast<String, dynamic>();
+          final image = (mapped['image'] as String? ?? '').trim();
+          if (image.isNotEmpty) {
+            templates.add(_customTemplateFromStorageMap(mapped));
+          }
+        }
+      }
 
-      TemplateGalleryScreen.customTemplates.value = images.map(_customTemplateFromImage).toList();
+      final byKey = <String, _TemplateCardModel>{};
+      for (final template in templates) {
+        byKey[_templateKey(template)] = template;
+      }
+      TemplateGalleryScreen.customTemplates.value = byKey.values.toList();
     } catch (_) {
       // Keep launch page usable even if local template storage fails.
     }
@@ -56,13 +69,23 @@ extension _TemplateGalleryPersistence on _TemplateGalleryScreenState {
   }
 }
 
-void _registerCustomTemplate(String image) {
+void _registerCustomTemplate(_TemplateCardModel template) {
   final current = List<_TemplateCardModel>.from(TemplateGalleryScreen.customTemplates.value);
-  if (current.any((template) => template.image == image)) {
-    return;
+  final key = _templateKey(template);
+  final existingIndex = current.indexWhere((entry) => _templateKey(entry) == key);
+  if (existingIndex >= 0) {
+    current[existingIndex] = template;
+  } else {
+    current.insert(0, template);
   }
 
-  current.insert(0, _customTemplateFromImage(image));
+  TemplateGalleryScreen.customTemplates.value = current;
+  _persistCustomTemplates();
+}
+
+void _removeCustomTemplate(_TemplateCardModel template) {
+  final current = List<_TemplateCardModel>.from(TemplateGalleryScreen.customTemplates.value);
+  current.removeWhere((entry) => _templateKey(entry) == _templateKey(template));
   TemplateGalleryScreen.customTemplates.value = current;
   _persistCustomTemplates();
 }
@@ -79,11 +102,11 @@ Future<File> _existingServaLocalMetadataFile(String fileName) async {
 Future<void> _persistCustomTemplates() async {
   try {
     final file = await _customTemplateFile();
-    final images = TemplateGalleryScreen.customTemplates.value
-        .map((template) => template.image)
-        .where((image) => image.trim().isNotEmpty)
+    final templates = TemplateGalleryScreen.customTemplates.value
+        .where((template) => template.image.trim().isNotEmpty)
+        .map(_customTemplateToStorageMap)
         .toList();
-    await file.writeAsString(jsonEncode(images));
+    await file.writeAsString(jsonEncode(templates));
   } catch (_) {
     // Non-fatal: launch screen still works even if template persistence fails.
   }

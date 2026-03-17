@@ -35,6 +35,14 @@ class TemplateGalleryScreen extends StatefulWidget {
     verifiedTemplateKeys.value = _defaultVerifiedTemplateKeys();
   }
 
+  static Future<void> showCreateTemplateSheet(BuildContext context) {
+    return _showCreateTemplateSheet(context);
+  }
+
+  static Future<void> showEditTemplateSheet(BuildContext context, _TemplateCardModel template) {
+    return _showCreateTemplateSheet(context, existingTemplate: template);
+  }
+
   static const templates = _templateCatalog;
 
   @override
@@ -117,15 +125,16 @@ class _TemplateGalleryScreenState extends State<TemplateGalleryScreen> {
               return ValueListenableBuilder<List<_TemplateCardModel>>(
                 valueListenable: TemplateGalleryScreen.customTemplates,
                 builder: (context, customTemplatesValue, _) {
-                  final verifiedBuiltIns = TemplateGalleryScreen.templates
-                      .where((template) => verifiedKeys.contains(_templateKey(template)))
-                      .toList();
-                  final verifiedCustom = customTemplatesValue
-                      .where((template) => verifiedKeys.contains(_templateKey(template)))
-                      .toList();
-                  final experimentalCustom = customTemplatesValue
-                      .where((template) => !verifiedKeys.contains(_templateKey(template)))
-                      .toList();
+                  final verifiedBuiltIns = _mergeTemplateLists(
+                    TemplateGalleryScreen.templates
+                        .where((template) => verifiedKeys.contains(_templateKey(template)))
+                        .toList(),
+                    customTemplatesValue.where((template) => verifiedKeys.contains(_templateKey(template))).toList(),
+                  );
+                  final experimentalTemplates = _mergeTemplateLists(
+                    builtInExperimental,
+                    customTemplatesValue.where((template) => !verifiedKeys.contains(_templateKey(template))).toList(),
+                  );
 
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -133,13 +142,13 @@ class _TemplateGalleryScreenState extends State<TemplateGalleryScreen> {
                       _TemplateSection(
                         title: 'Verified',
                         subtitle: 'Templates we have personally smoke-tested.',
-                        templates: [...verifiedBuiltIns, ...verifiedCustom],
+                        templates: verifiedBuiltIns,
                       ),
                       const SizedBox(height: 10),
                       _TemplateSection(
                         title: 'Experimental',
                         subtitle: 'Everything else, including pasted images and unverified presets.',
-                        templates: [...experimentalCustom, ...builtInExperimental],
+                        templates: experimentalTemplates,
                       ),
                     ],
                   );

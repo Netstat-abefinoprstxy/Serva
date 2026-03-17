@@ -87,114 +87,137 @@ _TemplateCardModel _customTemplateFromImage(String image) {
     icon: Icons.auto_awesome_motion_rounded,
     accent: const Color(0xFFA0C4FF),
     seedFiles: const [],
+    mountTargets: const ['/data', '/misc'],
   );
+}
+
+_TemplateCardModel _customTemplateFromStorageMap(Map<String, dynamic> json) {
+  final image = (json['image'] as String? ?? '').trim();
+  final label = (json['label'] as String? ?? '').trim();
+  final name = (json['name'] as String? ?? '').trim();
+  final subtitle = (json['subtitle'] as String? ?? '').trim();
+  final description = (json['description'] as String? ?? '').trim();
+  final comparableTo = (json['comparableTo'] as List?)?.cast<String>() ?? const <String>[];
+  final env = (json['env'] as List?)?.cast<String>() ?? const <String>[];
+  final mountTargets = (json['mountTargets'] as List?)?.cast<String>() ?? const <String>[];
+  final seedFiles = ((json['seedFiles'] as List?) ?? const [])
+      .whereType<Map>()
+      .map(
+        (entry) => _TemplateSeedFile(
+          relativePath: (entry['relativePath'] as String? ?? '').trim(),
+          description: (entry['description'] as String? ?? '').trim(),
+          contents: entry['contents'] as String? ?? '',
+          overwriteIfInvalidJson: entry['overwriteIfInvalidJson'] as bool? ?? false,
+        ),
+      )
+      .where((entry) => entry.relativePath.isNotEmpty)
+      .toList();
+  final portValue = json['port'];
+  final port = portValue is num ? portValue.toInt() : int.tryParse('$portValue') ?? 80;
+
+  return _TemplateCardModel(
+    label: label.isEmpty ? _titleFromImage(image) : label,
+    subtitle: subtitle.isEmpty ? 'Custom Template' : subtitle,
+    description: description.isEmpty ? image : description,
+    comparableTo: comparableTo.where((value) => value.trim().isNotEmpty).toList(),
+    name: name.isEmpty ? _templateNameFromImage(image) : name,
+    image: image,
+    port: port <= 0 ? 80 : port,
+    icon: Icons.auto_awesome_motion_rounded,
+    accent: const Color(0xFFA0C4FF),
+    env: env.where((value) => value.trim().isNotEmpty).toList(),
+    seedFiles: seedFiles,
+    mountTargets: mountTargets.isEmpty ? const ['/data', '/misc'] : mountTargets,
+  );
+}
+
+Map<String, dynamic> _customTemplateToStorageMap(_TemplateCardModel template) {
+  return {
+    'label': template.label,
+    'subtitle': template.subtitle,
+    'description': template.description,
+    'comparableTo': template.comparableTo,
+    'name': template.name,
+    'image': template.image,
+    'port': template.port,
+    'env': template.env,
+    'mountTargets': _mountTargetsForTemplateCard(template),
+    'seedFiles': template.seedFiles
+        .map(
+          (file) => {
+            'relativePath': file.relativePath,
+            'description': file.description,
+            'contents': file.contents,
+            'overwriteIfInvalidJson': file.overwriteIfInvalidJson,
+          },
+        )
+        .toList(),
+  };
+}
+
+List<_TemplateCardModel> _mergeTemplateLists(
+  List<_TemplateCardModel> builtIns,
+  List<_TemplateCardModel> customTemplates,
+) {
+  final byKey = <String, _TemplateCardModel>{};
+  for (final template in builtIns) {
+    byKey[_templateKey(template)] = template;
+  }
+  for (final template in customTemplates) {
+    byKey[_templateKey(template)] = template;
+  }
+  return byKey.values.toList()
+    ..sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
 }
 
 Future<void> _prepareTemplateFiles(
   _TemplateCardModel template,
   _TemplateLaunchConfig launchConfig,
 ) async {
-  switch (template.name) {
-    case 'element':
-      await _prepareElementConfig(launchConfig.mounts);
-      break;
-    default:
-      break;
+  if (template.seedFiles.isEmpty) return;
+
+  final root = _serviceRootFromMounts(launchConfig.mounts);
+  if (root == null) return;
+
+  final rootDir = Directory(root);
+  if (!await rootDir.exists()) {
+    await rootDir.create(recursive: true);
+  }
+
+  for (final seedFile in template.seedFiles) {
+    final relativePath = seedFile.relativePath.trim().replaceAll('/', Platform.pathSeparator);
+    if (relativePath.isEmpty) continue;
+
+    final file = File('${rootDir.path}${Platform.pathSeparator}$relativePath');
+    final parent = file.parent;
+    if (!await parent.exists()) {
+      await parent.create(recursive: true);
+    }
+
+    if (await file.exists()) {
+      if (!seedFile.overwriteIfInvalidJson) {
+        continue;
+      }
+
+      try {
+        final raw = await file.readAsString();
+        jsonDecode(raw);
+        continue;
+      } catch (_) {
+        // Replace invalid JSON files when explicitly allowed.
+      }
+    }
+
+    await file.writeAsString(seedFile.contents);
   }
 }
 
-Future<void> _prepareElementConfig(List<GoServiceDefinitionMount> mounts) async {
-  GoServiceDefinitionMount? configMount;
+String? _serviceRootFromMounts(List<GoServiceDefinitionMount> mounts) {
   for (final mount in mounts) {
-    if (mount.type.trim().toLowerCase() == 'bind' && mount.target.trim() == '/config') {
-      configMount = mount;
-      break;
-    }
+    if (mount.type.trim().toLowerCase() != 'bind') continue;
+    final source = mount.source.trim();
+    if (source.isEmpty) continue;
+    return Directory(source).parent.path;
   }
-  if (configMount == null) return;
-
-  final configDir = Directory(configMount.source);
-  if (!await configDir.exists()) {
-    await configDir.create(recursive: true);
-  }
-
-  final configFile = File('${configDir.path}${Platform.pathSeparator}config.json');
-  if (await configFile.exists()) {
-    try {
-      final raw = await configFile.readAsString();
-      jsonDecode(raw);
-      return;
-    } catch (_) {
-      // Replace only known-bad/invalid generated config.
-    }
-  }
-
-  final config = {
-    'default_server_config': {
-      'm.homeserver': {
-        'base_url': 'https://matrix-client.matrix.org',
-        'server_name': 'matrix.org',
-      },
-      'm.identity_server': {
-        'base_url': 'https://vector.im',
-      },
-    },
-    'disable_custom_urls': false,
-    'disable_guests': false,
-    'disable_login_language_selector': false,
-    'disable_3pid_login': false,
-    'brand': 'Element',
-    'integrations_ui_url': 'https://scalar.vector.im/',
-    'integrations_rest_url': 'https://scalar.vector.im/api',
-    'integrations_widgets_urls': [
-      'https://scalar.vector.im/_matrix/integrations/v1',
-      'https://scalar.vector.im/api',
-      'https://scalar-staging.vector.im/_matrix/integrations/v1',
-      'https://scalar-staging.vector.im/api',
-      'https://scalar-staging.riot.im/scalar/api',
-    ],
-    'bug_report_endpoint_url': 'https://element.io/bugreports/submit',
-    'uisi_autorageshake_app': 'element-auto-uisi',
-    'default_country_code': 'US',
-    'show_labs_settings': false,
-    'features': <String, dynamic>{},
-    'default_federate': true,
-    'default_theme': 'light',
-    'room_directory': {
-      'servers': ['matrix.org'],
-    },
-    'enable_presence_by_hs_url': {
-      'https://matrix.org': false,
-      'https://matrix-client.matrix.org': false,
-    },
-    'setting_defaults': {
-      'breadcrumbs': true,
-      'MessageComposerInput.showStickersButton': false,
-      'MessageComposerInput.showPollsButton': false,
-    },
-    'jitsi': {
-      'preferred_domain': 'meet.element.io',
-    },
-    'jitsi_widget': {
-      'skip_built_in_welcome_screen': true,
-    },
-    'voip': {
-      'obey_asserted_identity': false,
-    },
-    'element_call': {
-      'url': 'https://call.element.io',
-      'participant_limit': 8,
-      'brand': 'Element Call',
-      'exclusive': false,
-    },
-    'logout_redirect_url': null,
-    'sso_redirect_options': {
-      'immediate': false,
-      'on_welcome_page': true,
-    },
-    'map_style_url': 'https://api.maptiler.com/maps/streets/style.json?key=fU3vlMsMn4Jb6dnEIFsx',
-  };
-
-  final encoder = const JsonEncoder.withIndent('    ');
-  await configFile.writeAsString('${encoder.convert(config)}\n');
+  return null;
 }

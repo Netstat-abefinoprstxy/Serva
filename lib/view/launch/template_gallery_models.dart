@@ -56,10 +56,14 @@ class _TemplateSeedFile {
   const _TemplateSeedFile({
     required this.relativePath,
     required this.description,
+    required this.contents,
+    this.overwriteIfInvalidJson = false,
   });
 
   final String relativePath;
   final String description;
+  final String contents;
+  final bool overwriteIfInvalidJson;
 }
 
 class _TemplateCardModel {
@@ -75,6 +79,7 @@ class _TemplateCardModel {
     required this.accent,
     this.env = const [],
     this.seedFiles = const [],
+    this.mountTargets = const [],
   });
 
   final String label;
@@ -88,4 +93,5 @@ class _TemplateCardModel {
   final Color accent;
   final List<String> env;
   final List<_TemplateSeedFile> seedFiles;
+  final List<String> mountTargets;
 }
