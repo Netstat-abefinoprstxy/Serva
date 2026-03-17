@@ -55,16 +55,16 @@ Future<void> main() async {
 
   await _startBackendIfNeeded();
 
-  runApp(const SovereignApp());
+  runApp(const ServaApp());
 }
 
-class SovereignApp extends StatelessWidget {
-  const SovereignApp({super.key});
+class ServaApp extends StatelessWidget {
+  const ServaApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Sovereign',
+      title: 'Serva',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.dark,
       theme: ThemeData(

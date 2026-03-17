@@ -1,15 +1,21 @@
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:sovereign/api/go_models.dart';
-import 'package:sovereign/api/sovereign_api.dart';
+import 'package:serva/api/go_models.dart';
+import 'package:serva/api/sovereign_api.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../bloc/main_bloc.dart';
 import '../bloc/main_event.dart';
 import '../bloc/main_state.dart';
+
+const _dockerDesktopStoreUrl = 'https://apps.microsoft.com/detail/xp8cbj40xlbwkx?hl=en-GB&gl=GB';
+const _virtualizationHelpUrl =
+    'https://support.microsoft.com/en-us/windows/enable-virtualization-on-windows-c5578302-6e43-4b4b-a449-8ced115f58e1';
+const _forceVirtualizationHelpPreview = false;
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -18,7 +24,7 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Sovereign'),
+        title: const Text('Serva'),
         actions: [
           IconButton(
             tooltip: 'Refresh',
@@ -102,6 +108,9 @@ class _ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dockerUnavailable = _looksLikeDockerUnavailable(message);
+    final virtualizationIssue = _looksLikeVirtualizationIssue(message);
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -110,8 +119,31 @@ class _ErrorView extends StatelessWidget {
           children: [
             const Icon(Icons.error_outline, size: 48),
             const SizedBox(height: 12),
-            Text(message, textAlign: TextAlign.center),
+            Text(
+              virtualizationIssue
+                  ? 'Docker Desktop needs virtualization enabled to run.\n\nTurn on virtualization in Windows and, if needed, enable virtualization in your BIOS/UEFI settings first, then retry.'
+                  : dockerUnavailable
+                  ? 'Docker Desktop is required before Serva can manage services.\n\nInstall or start Docker Desktop, then retry.'
+                  : message,
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 16),
+            if (virtualizationIssue) ...[
+              FilledButton.icon(
+                onPressed: () => _openUrl(context, _virtualizationHelpUrl),
+                icon: const Icon(Icons.memory),
+                label: const Text('Enable Virtualization'),
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (dockerUnavailable) ...[
+              FilledButton.icon(
+                onPressed: () => _openUrl(context, _dockerDesktopStoreUrl),
+                icon: const Icon(Icons.download),
+                label: const Text('Get Docker Desktop'),
+              ),
+              const SizedBox(height: 12),
+            ],
             FilledButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh),
@@ -133,24 +165,55 @@ class _LoadedView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final services = state.services;
+    final activeDefinitionIds = services.map((service) => service.name).toSet();
+    final savedDefinitions = state.definitions
+        .where((definition) => !activeDefinitionIds.contains(definition.name))
+        .toList();
 
     return Column(
       children: [
         _Header(healthOk: state.healthOk, lastMessage: state.lastMessage),
         const Divider(height: 1),
         Expanded(
-          child: services.isEmpty
+          child: services.isEmpty && savedDefinitions.isEmpty
               ? _EmptyServices(onCreate: onCreateService)
-              : ListView.separated(
-                  itemCount: services.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final service = services[index];
-                    return _ServiceTile(service: service);
-                  },
+              : ListView(
+                  children: [
+                    if (services.isNotEmpty) ...[
+                      const _SectionTitle(title: 'Live Services'),
+                      for (final service in services) ...[
+                        _ServiceTile(service: service),
+                        const Divider(height: 1),
+                      ],
+                    ],
+                    if (savedDefinitions.isNotEmpty) ...[
+                      const _SectionTitle(title: 'Saved Definitions'),
+                      for (final definition in savedDefinitions) ...[
+                        _SavedDefinitionTile(definition: definition),
+                        const Divider(height: 1),
+                      ],
+                    ],
+                  ],
                 ),
         ),
       ],
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Text(
+        title,
+        style: Theme.of(context).textTheme.titleMedium,
+      ),
     );
   }
 }
@@ -164,6 +227,8 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final dockerUnavailable = _looksLikeDockerUnavailable(lastMessage);
+    final virtualizationIssue = _looksLikeVirtualizationIssue(lastMessage);
 
     return Padding(
       padding: const EdgeInsets.all(12),
@@ -179,7 +244,13 @@ class _Header extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  healthOk ? 'Daemon connected' : 'Daemon not reachable',
+                  healthOk
+                      ? 'Daemon connected'
+                      : virtualizationIssue
+                      ? 'Virtualization required'
+                      : dockerUnavailable
+                      ? 'Docker Desktop required'
+                      : 'Daemon not reachable',
                   style: theme.textTheme.titleSmall,
                 ),
                 if (lastMessage != null && lastMessage!.trim().isNotEmpty)
@@ -192,6 +263,37 @@ class _Header extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                if (dockerUnavailable)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _openUrl(context, _dockerDesktopStoreUrl),
+                        icon: const Icon(Icons.download),
+                        label: const Text('Install Docker Desktop'),
+                      ),
+                    ),
+                  ),
+                if (virtualizationIssue)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'You may need to enable virtualization inside your BIOS/UEFI before Docker Desktop can start.',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: () => _openUrl(context, _virtualizationHelpUrl),
+                          icon: const Icon(Icons.memory),
+                          label: const Text('Virtualization Help'),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
@@ -199,6 +301,41 @@ class _Header extends StatelessWidget {
       ),
     );
   }
+}
+
+bool _looksLikeDockerUnavailable(String? message) {
+  if (message == null || message.trim().isEmpty) {
+    return false;
+  }
+
+  final normalized = message.toLowerCase();
+  return normalized.contains('docker') ||
+      normalized.contains('health check failed') ||
+      normalized.contains('connection refused') ||
+      normalized.contains('actively refused') ||
+      normalized.contains('daemon not reachable');
+}
+
+bool _looksLikeVirtualizationIssue(String? message) {
+  if (_forceVirtualizationHelpPreview) {
+    return true;
+  }
+
+  if (message == null || message.trim().isEmpty) {
+    return false;
+  }
+
+  final normalized = message.toLowerCase();
+  return normalized.contains('virtualization') ||
+      normalized.contains('hyper-v') ||
+      normalized.contains('hyperv') ||
+      normalized.contains('wsl') ||
+      normalized.contains('bios') ||
+      normalized.contains('uefi') ||
+      normalized.contains('hardware assisted virtualization') ||
+      normalized.contains('required feature is not installed') ||
+      normalized.contains('vmx') ||
+      normalized.contains('svm');
 }
 
 class _EmptyServices extends StatelessWidget {
@@ -325,6 +462,52 @@ class _ServiceTile extends StatelessWidget {
   }
 }
 
+class _SavedDefinitionTile extends StatelessWidget {
+  const _SavedDefinitionTile({required this.definition});
+
+  final GoServiceDefinition definition;
+
+  @override
+  Widget build(BuildContext context) {
+    final bloc = context.read<MainBloc>();
+
+    return ListTile(
+      leading: const CircleAvatar(child: Icon(Icons.save_outlined)),
+      title: Text(definition.name),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('${definition.image} • saved definition'),
+          if (definition.mounts.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                '${definition.mounts.length} persistent mount${definition.mounts.length == 1 ? '' : 's'}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+        ],
+      ),
+      isThreeLine: definition.mounts.isNotEmpty,
+      trailing: Wrap(
+        spacing: 4,
+        children: [
+          IconButton(
+            tooltip: 'Recreate',
+            onPressed: () => bloc.add(MainRecreateRequested(id: definition.id)),
+            icon: const Icon(Icons.restore),
+          ),
+          IconButton(
+            tooltip: 'Details',
+            onPressed: () => _showDefinitionDetailsSheet(context, definition),
+            icon: const Icon(Icons.tune),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 Future<void> _showServiceDetailsSheet(BuildContext context, GoService service) async {
   final bloc = context.read<MainBloc>();
 
@@ -335,6 +518,20 @@ Future<void> _showServiceDetailsSheet(BuildContext context, GoService service) a
     builder: (_) => FractionallySizedBox(
       heightFactor: 0.92,
       child: _ServiceDetailsSheet(service: service, bloc: bloc),
+    ),
+  );
+}
+
+Future<void> _showDefinitionDetailsSheet(BuildContext context, GoServiceDefinition definition) async {
+  final bloc = context.read<MainBloc>();
+
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (_) => FractionallySizedBox(
+      heightFactor: 0.75,
+      child: _DefinitionDetailsSheet(definition: definition, bloc: bloc),
     ),
   );
 }
@@ -350,7 +547,7 @@ class _ServiceDetailsSheet extends StatefulWidget {
 }
 
 class _ServiceDetailsSheetState extends State<_ServiceDetailsSheet> {
-  final SovereignApi _api = SovereignApi();
+  final ServaApi _api = ServaApi();
 
   late Future<_ServiceDetailsData> _future;
 
@@ -617,6 +814,13 @@ class _ServiceDetailsSheetState extends State<_ServiceDetailsSheet> {
                                     (mount) => _DetailRow(
                                       label: mount.destination,
                                       value: '${mount.source} (${mount.type}${mount.readOnly ? ', read-only' : ''})',
+                                      trailing: mount.type.toLowerCase() == 'bind'
+                                          ? IconButton(
+                                              tooltip: 'Open folder',
+                                              onPressed: () => _openDirectory(context, mount.source),
+                                              icon: const Icon(Icons.folder_open),
+                                            )
+                                          : null,
                                     ),
                                   )
                                   .toList(),
@@ -636,6 +840,140 @@ class _ServiceDetailsSheetState extends State<_ServiceDetailsSheet> {
                   ],
                 );
               },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DefinitionDetailsSheet extends StatelessWidget {
+  const _DefinitionDetailsSheet({required this.definition, required this.bloc});
+
+  final GoServiceDefinition definition;
+  final MainBloc bloc;
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete saved definition?'),
+        content: const Text(
+          'You can remove just the saved definition, or also delete any persistent data marked as managed by Serva.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop('definition'),
+            child: const Text('Delete definition'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop('definition+data'),
+            child: const Text('Delete with data'),
+          ),
+        ],
+      ),
+    );
+
+    if (choice == null || !context.mounted) return;
+
+    Navigator.of(context).pop();
+    bloc.add(
+      MainDeleteDefinitionRequested(
+        id: definition.id,
+        deleteData: choice == 'definition+data',
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(definition.name, style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: 4),
+                    Text(definition.image, style: Theme.of(context).textTheme.bodyMedium),
+                  ],
+                ),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  bloc.add(MainRecreateRequested(id: definition.id));
+                },
+                icon: const Icon(Icons.restore),
+                label: const Text('Recreate'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.tonalIcon(
+                onPressed: () => _confirmDelete(context),
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('Delete'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: ListView(
+              children: [
+                _DetailSection(
+                  title: 'Definition',
+                  child: Column(
+                    children: [
+                      _DetailRow(label: 'ID', value: definition.id),
+                      _DetailRow(label: 'Port', value: definition.containerPort.toString()),
+                      _DetailRow(label: 'Protocol', value: definition.serviceProto),
+                      _DetailRow(label: 'LAN', value: definition.lanEnabled ? 'enabled' : 'disabled'),
+                      _DetailRow(
+                        label: 'Current container',
+                        value: definition.currentContainerId.isEmpty ? 'not deployed' : _shortId(definition.currentContainerId),
+                      ),
+                      _DetailRow(
+                        label: 'Last host port',
+                        value: definition.lastKnownHostPort == 0 ? 'n/a' : definition.lastKnownHostPort.toString(),
+                      ),
+                      _DetailRow(label: 'Created', value: definition.createdAt),
+                      _DetailRow(label: 'Updated', value: definition.updatedAt),
+                    ],
+                  ),
+                ),
+                _DetailSection(
+                  title: 'Persistent Mounts',
+                  child: definition.mounts.isEmpty
+                      ? const Text('No persistent mounts configured yet.')
+                      : Column(
+                          children: definition.mounts
+                              .map(
+                                (mount) => _DetailRow(
+                                  label: mount.target,
+                                  value:
+                                      '${mount.source} (${mount.type}${mount.readOnly ? ', read-only' : ''}${mount.managed ? ', managed' : ''})',
+                                  trailing: mount.type.toLowerCase() == 'bind'
+                                      ? IconButton(
+                                          tooltip: 'Open folder',
+                                          onPressed: () => _openDirectory(context, mount.source),
+                                          icon: const Icon(Icons.folder_open),
+                                        )
+                                      : null,
+                                ),
+                              )
+                              .toList(),
+                        ),
+                ),
+              ],
             ),
           ),
         ],
@@ -675,10 +1013,11 @@ class _DetailSection extends StatelessWidget {
 }
 
 class _DetailRow extends StatelessWidget {
-  const _DetailRow({required this.label, required this.value});
+  const _DetailRow({required this.label, required this.value, this.trailing});
 
   final String label;
   final String value;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -703,6 +1042,10 @@ class _DetailRow extends StatelessWidget {
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           ),
+          if (trailing != null) ...[
+            const SizedBox(width: 8),
+            trailing!,
+          ],
         ],
       ),
     );
@@ -740,6 +1083,28 @@ Future<void> _openUrl(BuildContext context, String url) async {
   final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
   if (!ok && context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open link')));
+  }
+}
+
+Future<void> _openDirectory(BuildContext context, String path) async {
+  final trimmed = path.trim();
+  if (trimmed.isEmpty) return;
+
+  try {
+    if (Platform.isWindows) {
+      await Process.start('explorer.exe', [trimmed]);
+    } else if (Platform.isMacOS) {
+      await Process.start('open', [trimmed]);
+    } else if (Platform.isLinux) {
+      await Process.start('xdg-open', [trimmed]);
+    } else {
+      throw UnsupportedError('Opening folders is not supported on this platform.');
+    }
+  } catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Could not open folder: $error')),
+    );
   }
 }
 
@@ -810,8 +1175,28 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
   final _imageCtrl = TextEditingController();
   final _portCtrl = TextEditingController(text: '80');
   final _formKey = GlobalKey<FormState>();
+  final _mountSourceCtrl = TextEditingController();
+  final _mountTargetCtrl = TextEditingController();
+  final List<GoServiceDefinitionMount> _mounts = [];
 
   int _selectedTemplate = 0;
+  bool _mountReadOnly = false;
+  bool _mountManaged = true;
+  String _mountType = 'bind';
+
+  String get _defaultManagedBasePath {
+    final userProfile = Platform.environment['USERPROFILE'];
+    if (userProfile != null && userProfile.trim().isNotEmpty) {
+      return '$userProfile\\Documents\\Serva';
+    }
+
+    final home = Platform.environment['HOME'];
+    if (home != null && home.trim().isNotEmpty) {
+      return '$home${Platform.pathSeparator}Documents${Platform.pathSeparator}Serva';
+    }
+
+    return 'Documents${Platform.pathSeparator}Serva';
+  }
 
   @override
   void initState() {
@@ -824,6 +1209,8 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
     _nameCtrl.dispose();
     _imageCtrl.dispose();
     _portCtrl.dispose();
+    _mountSourceCtrl.dispose();
+    _mountTargetCtrl.dispose();
     super.dispose();
   }
 
@@ -900,7 +1287,12 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
     setState(() {
       _imageCtrl.text = image;
       if (_nameCtrl.text.trim().isEmpty) {
-        _nameCtrl.text = _suggestNameFromImage(image);
+        final suggested = _suggestNameFromImage(image);
+        _nameCtrl.text = suggested;
+        if (_mounts.isEmpty &&
+            (_mountSourceCtrl.text.trim().isEmpty || _mountSourceCtrl.text.startsWith(_defaultManagedBasePath))) {
+          _mountSourceCtrl.text = '${_defaultMountRootForName(suggested)}\\data';
+        }
       }
     });
   }
@@ -908,14 +1300,87 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
   void _applyTemplate(int index) {
     final template = templates[index];
     final suffix = Random().nextInt(9000) + 1000;
-    _nameCtrl.text = '${template.name}-$suffix';
+    final serviceName = '${template.name}-$suffix';
+    _nameCtrl.text = serviceName;
     _imageCtrl.text = template.image;
     _portCtrl.text = template.port.toString();
+    _mounts
+      ..clear()
+      ..addAll(_defaultMountsForTemplate(template.name, serviceName));
+    _mountSourceCtrl.clear();
+    _mountTargetCtrl.clear();
+    _mountReadOnly = false;
+    _mountManaged = true;
+    _mountType = 'bind';
+  }
+
+  String _defaultMountRootForName(String serviceName) {
+    final sanitized = serviceName.trim().replaceAll(RegExp(r'[^a-zA-Z0-9_-]+'), '-');
+    return '$_defaultManagedBasePath\\$sanitized';
+  }
+
+  List<String> _defaultMountTargetsForTemplate(String templateName) {
+    switch (templateName) {
+      case 'navidrome':
+        return const ['/data', '/music'];
+      case 'uptime-kuma':
+        return const ['/app/data'];
+      case 'vaultwarden':
+        return const ['/data'];
+      case 'grafana':
+        return const ['/var/lib/grafana'];
+      case 'nextcloud':
+        return const ['/var/www/html'];
+      case 'jellyfin':
+        return const ['/config'];
+      case 'gitea':
+        return const ['/data'];
+      default:
+        return const ['/data'];
+    }
+  }
+
+  List<GoServiceDefinitionMount> _defaultMountsForTemplate(String templateName, String serviceName) {
+    final root = _defaultMountRootForName(serviceName);
+    return _defaultMountTargetsForTemplate(templateName)
+        .map(
+          (target) => GoServiceDefinitionMount(
+            type: 'bind',
+            source: '$root\\${_subfolderNameForTarget(target)}',
+            target: target,
+            readOnly: false,
+            managed: true,
+          ),
+        )
+        .toList();
+  }
+
+  String _subfolderNameForTarget(String target) {
+    final segments = target.split('/').where((segment) => segment.trim().isNotEmpty).toList();
+    if (segments.isEmpty) {
+      return 'data';
+    }
+    return segments.join('-');
   }
 
   void _createService() {
     final valid = _formKey.currentState?.validate() ?? false;
     if (!valid) return;
+
+    final mounts = List<GoServiceDefinitionMount>.from(_mounts);
+    final draftSource = _mountSourceCtrl.text.trim();
+    final draftTarget = _mountTargetCtrl.text.trim();
+    if (draftSource.isNotEmpty && draftTarget.isNotEmpty) {
+      mounts.add(
+        GoServiceDefinitionMount(
+          type: _mountType,
+          source: draftSource,
+          target: draftTarget,
+          readOnly: _mountReadOnly,
+          managed: _mountManaged,
+        ),
+      );
+    }
 
     Navigator.of(context).pop();
     widget.bloc.add(
@@ -923,8 +1388,43 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
         name: _nameCtrl.text.trim(),
         image: _imageCtrl.text.trim(),
         containerPort: int.parse(_portCtrl.text.trim()),
+        mounts: mounts,
       ),
     );
+  }
+
+  void _addMount() {
+    final source = _mountSourceCtrl.text.trim();
+    final target = _mountTargetCtrl.text.trim();
+    if (source.isEmpty || target.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Both mount source and target are required.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _mounts.add(
+        GoServiceDefinitionMount(
+          type: _mountType,
+          source: source,
+          target: target,
+          readOnly: _mountReadOnly,
+          managed: _mountManaged,
+        ),
+      );
+      _mountSourceCtrl.clear();
+      _mountTargetCtrl.clear();
+      _mountReadOnly = false;
+      _mountManaged = true;
+      _mountType = 'bind';
+    });
+  }
+
+  void _removeMount(int index) {
+    setState(() {
+      _mounts.removeAt(index);
+    });
   }
 
   void _createTest() {
@@ -1023,6 +1523,93 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
                   },
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text('Persistent mounts', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 8),
+          if (_mounts.isNotEmpty)
+            Container(
+              constraints: const BoxConstraints(maxHeight: 180),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _mounts.length,
+                itemBuilder: (context, index) {
+                  final mount = _mounts[index];
+                  return ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('${mount.source} → ${mount.target}'),
+                    subtitle: Text(
+                      '${mount.type}${mount.readOnly ? ' • read-only' : ''}${mount.managed ? ' • managed' : ''}',
+                    ),
+                    trailing: IconButton(
+                      tooltip: 'Remove mount',
+                      onPressed: () => _removeMount(index),
+                      icon: const Icon(Icons.close),
+                    ),
+                  );
+                },
+              ),
+            ),
+          DropdownButtonFormField<String>(
+            value: _mountType,
+            decoration: const InputDecoration(labelText: 'Mount type'),
+            items: const [
+              DropdownMenuItem(value: 'bind', child: Text('Host path bind')),
+              DropdownMenuItem(value: 'volume', child: Text('Docker volume')),
+            ],
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() {
+                _mountType = value;
+              });
+            },
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _mountSourceCtrl,
+            decoration: InputDecoration(
+              labelText: _mountType == 'bind' ? 'Source path' : 'Volume name',
+              hintText: _mountType == 'bind' ? r'e.g. C:\Users\you\Documents\Serva\vaultwarden' : 'e.g. serva-vaultwarden-data',
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _mountTargetCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Container target',
+              hintText: 'e.g. /data',
+            ),
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Read-only'),
+            value: _mountReadOnly,
+            onChanged: (value) {
+              setState(() {
+                _mountReadOnly = value;
+              });
+            },
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Managed by Serva'),
+            subtitle: const Text('Marks this mount as part of the durable service definition.'),
+            value: _mountManaged,
+            onChanged: (value) {
+              setState(() {
+                _mountManaged = value;
+              });
+            },
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: _addMount,
+              icon: const Icon(Icons.add_link),
+              label: const Text('Add mount'),
             ),
           ),
           const SizedBox(height: 16),

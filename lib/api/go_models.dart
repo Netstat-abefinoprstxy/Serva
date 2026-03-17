@@ -262,3 +262,88 @@ class GoInspectMount {
     );
   }
 }
+
+class GoServiceDefinitionMount {
+  const GoServiceDefinitionMount({
+    required this.type,
+    required this.source,
+    required this.target,
+    required this.readOnly,
+    required this.managed,
+  });
+
+  final String type;
+  final String source;
+  final String target;
+  final bool readOnly;
+  final bool managed;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'type': type,
+      'source': source,
+      'target': target,
+      'readOnly': readOnly,
+      'managed': managed,
+    };
+  }
+
+  factory GoServiceDefinitionMount.fromJson(Map<String, dynamic> json) {
+    return GoServiceDefinitionMount(
+      type: json['type'] as String? ?? 'bind',
+      source: json['source'] as String? ?? '',
+      target: json['target'] as String? ?? '',
+      readOnly: json['readOnly'] as bool? ?? false,
+      managed: json['managed'] as bool? ?? false,
+    );
+  }
+}
+
+class GoServiceDefinition {
+  const GoServiceDefinition({
+    required this.id,
+    required this.name,
+    required this.image,
+    required this.containerPort,
+    required this.serviceProto,
+    required this.lanEnabled,
+    required this.currentContainerId,
+    required this.lastKnownHostPort,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.mounts,
+  });
+
+  final String id;
+  final String name;
+  final String image;
+  final int containerPort;
+  final String serviceProto;
+  final bool lanEnabled;
+  final String currentContainerId;
+  final int lastKnownHostPort;
+  final String createdAt;
+  final String updatedAt;
+  final List<GoServiceDefinitionMount> mounts;
+
+  bool get isDeployed => currentContainerId.trim().isNotEmpty;
+
+  factory GoServiceDefinition.fromJson(Map<String, dynamic> json) {
+    return GoServiceDefinition(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      image: json['image'] as String? ?? '',
+      containerPort: json['containerPort'] as int? ?? 0,
+      serviceProto: json['serviceProto'] as String? ?? 'http',
+      lanEnabled: json['lanEnabled'] as bool? ?? false,
+      currentContainerId: json['currentContainerId'] as String? ?? '',
+      lastKnownHostPort: json['lastKnownHostPort'] as int? ?? 0,
+      createdAt: json['createdAt'] as String? ?? '',
+      updatedAt: json['updatedAt'] as String? ?? '',
+      mounts: ((json['mounts'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((entry) => GoServiceDefinitionMount.fromJson(entry.cast<String, dynamic>()))
+          .toList(),
+    );
+  }
+}

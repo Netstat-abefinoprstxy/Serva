@@ -1,3 +1,5 @@
+import 'package:serva/api/go_models.dart';
+
 /// Base type for MainBloc events.
 abstract class MainEvent {
   const MainEvent();
@@ -15,11 +17,17 @@ class MainCreateTestRequested extends MainEvent {
 
 /// Create a managed service with the given docker image and container port.
 class MainCreateServiceRequested extends MainEvent {
-  const MainCreateServiceRequested({required this.name, required this.image, this.containerPort = 80});
+  const MainCreateServiceRequested({
+    required this.name,
+    required this.image,
+    this.containerPort = 80,
+    this.mounts = const [],
+  });
 
   final String name;
   final String image;
   final int containerPort;
+  final List<GoServiceDefinitionMount> mounts;
 }
 
 /// Start a managed service/container by id.
@@ -42,6 +50,18 @@ class MainRestartRequested extends MainEvent {
 class MainRemoveRequested extends MainEvent {
   const MainRemoveRequested({required this.id});
   final String id;
+}
+
+class MainRecreateRequested extends MainEvent {
+  const MainRecreateRequested({required this.id});
+  final String id;
+}
+
+class MainDeleteDefinitionRequested extends MainEvent {
+  const MainDeleteDefinitionRequested({required this.id, this.deleteData = false});
+
+  final String id;
+  final bool deleteData;
 }
 
 /// Expose or un-expose a managed service to the local network (LAN).

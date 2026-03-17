@@ -1,5 +1,5 @@
-name: sovereign
-description: "A new Flutter project."
+name: serva
+description: "Serva is a desktop app for managing durable self-hosted services."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -39,7 +39,17 @@ dependencies:
   json_annotation: ^4.9.0
   flutter_bloc: ^9.1.1
   url_launcher: ^6.3.2
-  msix: ^3.16.13
+
+msix_config:
+  display_name: Serva
+  publisher_display_name: Netstat
+  identity_name: Netstat.Serva
+  publisher: CN=D2749BB3-3A15-4469-B2DC-E69B344AE8C6
+  msix_version: 1.0.0.0
+  logo_path: windows/runner/resources/app_icon.png
+  store: true
+  install_certificate: false
+
 
 dev_dependencies:
   flutter_test:
@@ -54,6 +64,7 @@ dev_dependencies:
   build_runner: ^2.11.1
   freezed: ^3.1.0
   json_serializable: ^6.9.0
+  msix: ^3.16.13
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -96,3 +107,4 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+

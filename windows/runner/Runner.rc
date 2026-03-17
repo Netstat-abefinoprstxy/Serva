@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "sovereign" "\0"
+            VALUE "FileDescription", "Serva" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "sovereign" "\0"
+            VALUE "InternalName", "serva" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "sovereign.exe" "\0"
-            VALUE "ProductName", "sovereign" "\0"
+            VALUE "OriginalFilename", "serva.exe" "\0"
+            VALUE "ProductName", "Serva" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

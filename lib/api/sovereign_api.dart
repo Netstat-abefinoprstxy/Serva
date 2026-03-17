@@ -9,8 +9,8 @@ import 'go_models.dart';
 /// - Keep it boring and UI-agnostic
 /// - Centralize endpoint URLs + JSON handling
 /// - Throw readable errors
-class SovereignApi {
-  SovereignApi({String baseUrl = 'http://127.0.0.1:8080'}) : _base = Uri.parse(baseUrl);
+class ServaApi {
+  ServaApi({String baseUrl = 'http://127.0.0.1:8080'}) : _base = Uri.parse(baseUrl);
 
   final Uri _base;
 
@@ -49,6 +49,23 @@ class SovereignApi {
     throw Exception('Unexpected /services response: ${res.body}');
   }
 
+  Future<List<GoServiceDefinition>> listServiceDefinitions() async {
+    final res = await http.get(_u('/service-definitions'));
+    if (res.statusCode != 200) {
+      throw Exception('List service definitions failed (${res.statusCode}): ${res.body}');
+    }
+
+    final json = jsonDecode(res.body);
+    if (json is List) {
+      return json
+          .whereType<Map>()
+          .map((entry) => GoServiceDefinition.fromJson(entry.cast<String, dynamic>()))
+          .toList();
+    }
+
+    throw Exception('Unexpected /service-definitions response: ${res.body}');
+  }
+
   /// POST /services/create-test
   Future<GoCreateServiceResponse?> createTestService() async {
     final res = await http.post(_u('/services/create-test'));
@@ -69,9 +86,17 @@ class SovereignApi {
     required String name,
     required String image,
     int containerPort = 80,
+    List<GoServiceDefinitionMount> mounts = const [],
   }) async {
     final res = await http.post(
-      _u('/services/create', {'name': name, 'image': image, 'containerPort': containerPort.toString()}),
+      _u('/services/create'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'name': name,
+        'image': image,
+        'containerPort': containerPort,
+        'mounts': mounts.map((mount) => mount.toJson()).toList(),
+      }),
     );
 
     if (res.statusCode >= 400) {
@@ -84,6 +109,39 @@ class SovereignApi {
       return GoCreateServiceResponse.fromJson(json);
     }
     return null;
+  }
+
+  Future<GoCreateServiceResponse> recreateService(String id) async {
+    final res = await http.post(_u('/services/recreate', {'id': id}));
+    if (res.statusCode >= 400) {
+      throw Exception('Recreate failed (${res.statusCode}): ${res.body}');
+    }
+
+    final json = jsonDecode(res.body);
+    if (json is Map<String, dynamic>) {
+      return GoCreateServiceResponse.fromJson(json);
+    }
+
+    throw Exception('Unexpected /services/recreate response: ${res.body}');
+  }
+
+  Future<GoActionResponse> deleteServiceDefinition(String id, {bool deleteData = false}) async {
+    final res = await http.delete(
+      _u('/service-definitions/delete', {
+        'id': id,
+        'deleteData': deleteData ? '1' : '0',
+      }),
+    );
+    if (res.statusCode >= 400) {
+      throw Exception('Delete definition failed (${res.statusCode}): ${res.body}');
+    }
+
+    final json = jsonDecode(res.body);
+    if (json is Map<String, dynamic>) {
+      return GoActionResponse.fromJson(json);
+    }
+
+    throw Exception('Unexpected /service-definitions/delete response: ${res.body}');
   }
 
   /// POST /services/start?id=...

@@ -1,4 +1,4 @@
-import 'package:sovereign/api/go_models.dart';
+import 'package:serva/api/go_models.dart';
 
 /// Base type for MainBloc states.
 abstract class MainState {
@@ -18,9 +18,15 @@ class MainLoading extends MainState {
 
 /// Successfully loaded services.
 class MainLoaded extends MainState {
-  const MainLoaded({required this.services, required this.healthOk, this.lastMessage});
+  const MainLoaded({
+    required this.services,
+    required this.definitions,
+    required this.healthOk,
+    this.lastMessage,
+  });
 
   final List<GoService> services;
+  final List<GoServiceDefinition> definitions;
   final bool healthOk;
   final String? lastMessage;
 }

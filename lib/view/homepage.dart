@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:sovereign/api/sovereign_api.dart';
+import 'package:serva/api/sovereign_api.dart';
 
 import '../bloc/main_bloc.dart';
 import 'homescreen.dart';
@@ -16,7 +16,7 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider<MainBloc>(
-      create: (_) => MainBloc(api: SovereignApi()),
+      create: (_) => MainBloc(api: ServaApi()),
       child: const HomeScreen(),
     );
   }
