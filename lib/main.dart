@@ -66,8 +66,17 @@ class SovereignApp extends StatelessWidget {
     return MaterialApp(
       title: 'Sovereign',
       debugShowCheckedModeBanner: false,
+      themeMode: ThemeMode.dark,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
+      ),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.deepPurple,
+          brightness: Brightness.dark,
+        ),
+        brightness: Brightness.dark,
         useMaterial3: true,
       ),
       home: const HomePage(),
