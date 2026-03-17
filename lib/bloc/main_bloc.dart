@@ -11,6 +11,8 @@ class MainBloc extends Bloc<MainEvent, MainState> {
     on<MainCreateServiceRequested>(_onCreateService);
     on<MainStartRequested>(_onStart);
     on<MainStopRequested>(_onStop);
+    on<MainRestartRequested>(_onRestart);
+    on<MainRemoveRequested>(_onRemove);
     on<MainExposeLanRequested>(_onExposeLan);
 
     // Kick off an initial load.
@@ -131,6 +133,46 @@ class MainBloc extends Bloc<MainEvent, MainState> {
         emit(
           MainLoaded(services: previous.services, healthOk: previous.healthOk, lastMessage: 'Expose to LAN failed: $e'),
         );
+        return;
+      }
+
+      emit(MainError(message: e.toString()));
+    }
+  }
+
+  Future<void> _onRestart(MainRestartRequested event, Emitter<MainState> emit) async {
+    final previous = state;
+    emit(const MainLoading(message: 'Restarting...'));
+
+    try {
+      await _api.restartService(event.id);
+      final services = await _api.listServices();
+      final healthOk = (previous is MainLoaded) ? previous.healthOk : true;
+
+      emit(MainLoaded(services: services, healthOk: healthOk, lastMessage: 'Restarted.'));
+    } catch (e) {
+      if (previous is MainLoaded) {
+        emit(MainLoaded(services: previous.services, healthOk: previous.healthOk, lastMessage: 'Restart failed: $e'));
+        return;
+      }
+
+      emit(MainError(message: e.toString()));
+    }
+  }
+
+  Future<void> _onRemove(MainRemoveRequested event, Emitter<MainState> emit) async {
+    final previous = state;
+    emit(const MainLoading(message: 'Removing service...'));
+
+    try {
+      await _api.removeService(event.id);
+      final services = await _api.listServices();
+      final healthOk = (previous is MainLoaded) ? previous.healthOk : true;
+
+      emit(MainLoaded(services: services, healthOk: healthOk, lastMessage: 'Removed service.'));
+    } catch (e) {
+      if (previous is MainLoaded) {
+        emit(MainLoaded(services: previous.services, healthOk: previous.healthOk, lastMessage: 'Remove failed: $e'));
         return;
       }
 

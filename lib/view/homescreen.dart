@@ -1,9 +1,11 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:sovereign/api/go_models.dart';
-import 'dart:math';
+import 'package:sovereign/api/sovereign_api.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter/services.dart';
 
 import '../bloc/main_bloc.dart';
 import '../bloc/main_event.dart';
@@ -20,8 +22,7 @@ class HomeScreen extends StatelessWidget {
         actions: [
           IconButton(
             tooltip: 'Refresh',
-            onPressed: () =>
-                context.read<MainBloc>().add(const MainLoadRequested()),
+            onPressed: () => context.read<MainBloc>().add(const MainLoadRequested()),
             icon: const Icon(Icons.refresh),
           ),
         ],
@@ -39,8 +40,7 @@ class HomeScreen extends StatelessWidget {
           if (state is MainError) {
             return _ErrorView(
               message: state.message,
-              onRetry: () =>
-                  context.read<MainBloc>().add(const MainLoadRequested()),
+              onRetry: () => context.read<MainBloc>().add(const MainLoadRequested()),
             );
           }
 
@@ -87,7 +87,7 @@ class _LoadingView extends StatelessWidget {
         children: [
           const CircularProgressIndicator(),
           const SizedBox(height: 12),
-          Text(message ?? 'Working…'),
+          Text(message ?? 'Working...'),
         ],
       ),
     );
@@ -145,8 +145,8 @@ class _LoadedView extends StatelessWidget {
                   itemCount: services.length,
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (context, index) {
-                    final s = services[index];
-                    return _ServiceTile(service: s);
+                    final service = services[index];
+                    return _ServiceTile(service: service);
                   },
                 ),
         ),
@@ -171,9 +171,7 @@ class _Header extends StatelessWidget {
         children: [
           Icon(
             healthOk ? Icons.check_circle : Icons.warning_amber_rounded,
-            color: healthOk
-                ? theme.colorScheme.primary
-                : theme.colorScheme.error,
+            color: healthOk ? theme.colorScheme.primary : theme.colorScheme.error,
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -246,36 +244,7 @@ class _ServiceTile extends StatelessWidget {
   final GoService service;
 
   bool get _isRunning => service.state.toLowerCase() == 'running';
-
-  // Authoritative: provided by the daemon
   bool get _isLanExposed => service.lanEnabled;
-
-  Future<void> _openUrl(BuildContext context, String url) async {
-    final trimmed = url.trim();
-    if (trimmed.isEmpty) return;
-
-    Uri? uri;
-    try {
-      uri = Uri.parse(trimmed);
-    } catch (_) {
-      uri = null;
-    }
-
-    if (uri == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Invalid URL')));
-      return;
-    }
-
-    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-
-    if (!ok) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Could not open link')));
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -286,35 +255,37 @@ class _ServiceTile extends StatelessWidget {
       leading: CircleAvatar(
         child: Icon(_isRunning ? Icons.play_arrow : Icons.stop),
       ),
+      onTap: () => _showServiceDetailsSheet(context, service),
       title: Text(service.name),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('${service.image} • ${service.status}'),
-          if (service.lanEnabled && service.lanUrl.trim().isNotEmpty)
+          if (service.localUrl.trim().isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: InkWell(
-                onTap: () => _openUrl(context, service.lanUrl),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Text(
-                    service.lanUrl,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      decoration: TextDecoration.underline,
-                      color: theme.colorScheme.primary,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
+              child: Text(
+                service.localUrl,
+                style: theme.textTheme.bodySmall,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          if (service.lanEnabled && service.lanUrl.trim().isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                service.lanUrl,
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
         ],
       ),
-      isThreeLine: service.localUrl.trim().isNotEmpty,
+      isThreeLine: true,
       trailing: Wrap(
-        spacing: 8,
+        spacing: 4,
         children: [
           if (service.localUrl.trim().isNotEmpty)
             IconButton(
@@ -322,21 +293,15 @@ class _ServiceTile extends StatelessWidget {
               onPressed: () => _openUrl(context, service.localUrl),
               icon: const Icon(Icons.open_in_new),
             ),
-
           if (_isRunning)
             IconButton(
               tooltip: _isLanExposed ? 'Disable LAN access' : 'Expose to LAN',
-              onPressed: () => bloc.add(
-                MainExposeLanRequested(id: service.id, enabled: !_isLanExposed),
-              ),
+              onPressed: () => bloc.add(MainExposeLanRequested(id: service.id, enabled: !_isLanExposed)),
               icon: Icon(
                 Icons.wifi,
-                color: _isLanExposed
-                    ? Theme.of(context).colorScheme.primary
-                    : null,
+                color: _isLanExposed ? theme.colorScheme.primary : null,
               ),
             ),
-
           if (!_isRunning)
             IconButton(
               tooltip: 'Start',
@@ -349,10 +314,466 @@ class _ServiceTile extends StatelessWidget {
               onPressed: () => bloc.add(MainStopRequested(id: service.id)),
               icon: const Icon(Icons.stop),
             ),
+          IconButton(
+            tooltip: 'Details',
+            onPressed: () => _showServiceDetailsSheet(context, service),
+            icon: const Icon(Icons.tune),
+          ),
         ],
       ),
     );
   }
+}
+
+Future<void> _showServiceDetailsSheet(BuildContext context, GoService service) async {
+  final bloc = context.read<MainBloc>();
+
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (_) => FractionallySizedBox(
+      heightFactor: 0.92,
+      child: _ServiceDetailsSheet(service: service, bloc: bloc),
+    ),
+  );
+}
+
+class _ServiceDetailsSheet extends StatefulWidget {
+  const _ServiceDetailsSheet({required this.service, required this.bloc});
+
+  final GoService service;
+  final MainBloc bloc;
+
+  @override
+  State<_ServiceDetailsSheet> createState() => _ServiceDetailsSheetState();
+}
+
+class _ServiceDetailsSheetState extends State<_ServiceDetailsSheet> {
+  final SovereignApi _api = SovereignApi();
+
+  late Future<_ServiceDetailsData> _future;
+
+  bool get _isRunning => widget.service.state.toLowerCase() == 'running';
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _loadDetails();
+  }
+
+  Future<_ServiceDetailsData> _loadDetails() async {
+    final inspect = await _api.serviceInspect(widget.service.id);
+    final stats = await _api.serviceStats(widget.service.id);
+    final logs = await _api.serviceLogs(widget.service.id);
+    return _ServiceDetailsData(inspect: inspect, stats: stats, logs: logs);
+  }
+
+  void _refresh() {
+    setState(() {
+      _future = _loadDetails();
+    });
+  }
+
+  Future<void> _confirmRemove() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove service?'),
+        content: Text('This will force-remove "${widget.service.name}".'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      Navigator.of(context).pop();
+      widget.bloc.add(MainRemoveRequested(id: widget.service.id));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(widget.service.name, style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: 4),
+                    Text(widget.service.image, style: Theme.of(context).textTheme.bodyMedium),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Refresh details',
+                onPressed: _refresh,
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (widget.service.localUrl.trim().isNotEmpty)
+                FilledButton.tonalIcon(
+                  onPressed: () => _openUrl(context, widget.service.localUrl),
+                  icon: const Icon(Icons.open_in_new),
+                  label: const Text('Open local'),
+                ),
+              if (widget.service.lanUrl.trim().isNotEmpty)
+                FilledButton.tonalIcon(
+                  onPressed: () => _openUrl(context, widget.service.lanUrl),
+                  icon: const Icon(Icons.wifi),
+                  label: const Text('Open LAN'),
+                ),
+              FilledButton.tonalIcon(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  widget.bloc.add(MainRestartRequested(id: widget.service.id));
+                },
+                icon: const Icon(Icons.restart_alt),
+                label: const Text('Restart'),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  if (_isRunning) {
+                    widget.bloc.add(MainStopRequested(id: widget.service.id));
+                  } else {
+                    widget.bloc.add(MainStartRequested(id: widget.service.id));
+                  }
+                },
+                icon: Icon(_isRunning ? Icons.stop : Icons.play_arrow),
+                label: Text(_isRunning ? 'Stop' : 'Start'),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  widget.bloc.add(
+                    MainExposeLanRequested(id: widget.service.id, enabled: !widget.service.lanEnabled),
+                  );
+                },
+                icon: const Icon(Icons.settings_ethernet),
+                label: Text(widget.service.lanEnabled ? 'Disable LAN' : 'Enable LAN'),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: _confirmRemove,
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('Remove'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: FutureBuilder<_ServiceDetailsData>(
+              future: _future,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (snapshot.hasError) {
+                  return _ErrorView(
+                    message: snapshot.error.toString(),
+                    onRetry: _refresh,
+                  );
+                }
+
+                final data = snapshot.data;
+                if (data == null) {
+                  return _ErrorView(
+                    message: 'No details available.',
+                    onRetry: _refresh,
+                  );
+                }
+
+                return ListView(
+                  children: [
+                    _DetailSection(
+                      title: 'Overview',
+                      child: Column(
+                        children: [
+                          _DetailRow(label: 'State', value: data.inspect.state),
+                          _DetailRow(label: 'Status', value: data.inspect.status),
+                          _DetailRow(label: 'Container ID', value: _shortId(data.inspect.id)),
+                          _DetailRow(label: 'Created', value: data.inspect.created),
+                          _DetailRow(
+                            label: 'Restart policy',
+                            value: data.inspect.restartPolicy.isEmpty ? 'none' : data.inspect.restartPolicy,
+                          ),
+                          _DetailRow(label: 'Path', value: data.inspect.path),
+                          if (data.inspect.localUrl.trim().isNotEmpty)
+                            _DetailRow(label: 'Local URL', value: data.inspect.localUrl),
+                          if (data.inspect.lanUrl.trim().isNotEmpty)
+                            _DetailRow(label: 'LAN URL', value: data.inspect.lanUrl),
+                        ],
+                      ),
+                    ),
+                    _DetailSection(
+                      title: 'Ports',
+                      child: data.inspect.ports.isEmpty
+                          ? const Text('No published ports.')
+                          : Column(
+                              children: data.inspect.ports
+                                  .map(
+                                    (port) => _DetailRow(
+                                      label: port.containerRef,
+                                      value: port.publicPort > 0
+                                          ? '${port.ip.isEmpty ? '0.0.0.0' : port.ip}:${port.publicPort}'
+                                          : 'container-only',
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                    ),
+                    _DetailSection(
+                      title: 'Stats',
+                      child: Column(
+                        children: [
+                          _DetailRow(label: 'Read at', value: data.stats.readAt.isEmpty ? 'n/a' : data.stats.readAt),
+                          _DetailRow(
+                            label: 'CPU total',
+                            value: _nestedValueAsString(data.stats.raw, const ['cpu_stats', 'cpu_usage', 'total_usage']),
+                          ),
+                          _DetailRow(
+                            label: 'Memory usage',
+                            value: _nestedValueAsString(data.stats.raw, const ['memory_stats', 'usage']),
+                          ),
+                          _DetailRow(
+                            label: 'Memory limit',
+                            value: _nestedValueAsString(data.stats.raw, const ['memory_stats', 'limit']),
+                          ),
+                          _DetailRow(
+                            label: 'Network rx bytes',
+                            value: _sumNestedMapField(data.stats.raw['networks'], 'rx_bytes'),
+                          ),
+                          _DetailRow(
+                            label: 'Network tx bytes',
+                            value: _sumNestedMapField(data.stats.raw['networks'], 'tx_bytes'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    _DetailSection(
+                      title: 'Logs',
+                      trailing: IconButton(
+                        tooltip: 'Copy logs',
+                        onPressed: () async {
+                          await Clipboard.setData(ClipboardData(text: data.logs.logs));
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Logs copied')),
+                          );
+                        },
+                        icon: const Icon(Icons.copy_all),
+                      ),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: SelectableText(
+                          data.logs.logs.trim().isEmpty ? 'No logs returned.' : data.logs.logs,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'Courier'),
+                        ),
+                      ),
+                    ),
+                    _DetailSection(
+                      title: 'Environment',
+                      child: data.inspect.env.isEmpty
+                          ? const Text('No environment variables reported.')
+                          : Column(
+                              children: data.inspect.env
+                                  .map((entry) => _DetailRow(label: 'ENV', value: entry))
+                                  .toList(),
+                            ),
+                    ),
+                    _DetailSection(
+                      title: 'Mounts',
+                      child: data.inspect.mounts.isEmpty
+                          ? const Text('No mounts reported.')
+                          : Column(
+                              children: data.inspect.mounts
+                                  .map(
+                                    (mount) => _DetailRow(
+                                      label: mount.destination,
+                                      value: '${mount.source} (${mount.type}${mount.readOnly ? ', read-only' : ''})',
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                    ),
+                    _DetailSection(
+                      title: 'Labels',
+                      child: data.inspect.labels.isEmpty
+                          ? const Text('No labels reported.')
+                          : Column(
+                              children: data.inspect.labels.entries
+                                  .map((entry) => _DetailRow(label: entry.key, value: entry.value))
+                                  .toList(),
+                            ),
+                    ),
+                    const SizedBox(height: 32),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailSection extends StatelessWidget {
+  const _DetailSection({required this.title, required this.child, this.trailing});
+
+  final String title;
+  final Widget child;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+              ),
+              if (trailing != null) trailing!,
+            ],
+          ),
+          const SizedBox(height: 10),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: SelectableText(
+              value.isEmpty ? 'n/a' : value,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ServiceDetailsData {
+  const _ServiceDetailsData({
+    required this.inspect,
+    required this.stats,
+    required this.logs,
+  });
+
+  final GoInspectResponse inspect;
+  final GoStatsResponse stats;
+  final GoLogsResponse logs;
+}
+
+Future<void> _openUrl(BuildContext context, String url) async {
+  final trimmed = url.trim();
+  if (trimmed.isEmpty) return;
+
+  Uri? uri;
+  try {
+    uri = Uri.parse(trimmed);
+  } catch (_) {
+    uri = null;
+  }
+
+  if (uri == null) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid URL')));
+    return;
+  }
+
+  final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+  if (!ok && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open link')));
+  }
+}
+
+String _shortId(String id) => id.length <= 12 ? id : id.substring(0, 12);
+
+String _nestedValueAsString(Map<String, dynamic> root, List<String> path) {
+  dynamic current = root;
+  for (final segment in path) {
+    if (current is Map<String, dynamic>) {
+      current = current[segment];
+    } else if (current is Map) {
+      current = current[segment];
+    } else {
+      return 'n/a';
+    }
+  }
+
+  return current?.toString() ?? 'n/a';
+}
+
+String _sumNestedMapField(dynamic raw, String field) {
+  if (raw is! Map) return 'n/a';
+
+  var total = 0.0;
+  var found = false;
+  for (final value in raw.values) {
+    if (value is Map && value[field] is num) {
+      total += (value[field] as num).toDouble();
+      found = true;
+    }
+  }
+
+  if (!found) return 'n/a';
+  return total % 1 == 0 ? total.toInt().toString() : total.toStringAsFixed(2);
 }
 
 class _CreateServiceSheet extends StatefulWidget {
@@ -365,144 +786,25 @@ class _CreateServiceSheet extends StatefulWidget {
 }
 
 class _CreateServiceSheetState extends State<_CreateServiceSheet> {
-  static const templates =
-      <({String label, String name, String image, int port})>[
-        // Basic test
-        (
-          label: 'Test (nginx)',
-          name: 'sovereignd-test',
-          image: 'nginx:alpine',
-          port: 80,
-        ),
-
-        // Password Managers (Cloud Alternative: 1Password, Bitwarden SaaS)
-        (
-          label: 'Vaultwarden',
-          name: 'vaultwarden',
-          image: 'vaultwarden/server:latest',
-          port: 80,
-        ),
-
-        // Media (Cloud Alternative: Netflix / Spotify personal media)
-        (
-          label: 'Jellyfin',
-          name: 'jellyfin',
-          image: 'jellyfin/jellyfin:latest',
-          port: 8096,
-        ),
-        (
-          label: 'Navidrome',
-          name: 'navidrome',
-          image: 'deluan/navidrome:latest',
-          port: 4533,
-        ),
-
-        // Game Hosting (Cloud Alternative: Apex / Realms)
-        (
-          label: 'Minecraft',
-          name: 'minecraft',
-          image: 'itzg/minecraft-server:latest',
-          port: 25565,
-        ),
-
-        // Monitoring (Cloud Alternative: Pingdom / UptimeRobot)
-        (
-          label: 'Uptime Kuma',
-          name: 'uptime-kuma',
-          image: 'louislam/uptime-kuma:latest',
-          port: 3001,
-        ),
-
-        // ---- Cloud Replacement Services ----
-
-        // Google Drive / Dropbox Alternative
-        (
-          label: 'Nextcloud (Drive Alternative)',
-          name: 'nextcloud',
-          image: 'nextcloud:latest',
-          port: 80,
-        ),
-
-        // Google Photos Alternative
-        (
-          label: 'Immich (Photos Alternative)',
-          name: 'immich-server',
-          image: 'ghcr.io/immich-app/immich-server:release',
-          port: 2283,
-        ),
-
-        // Notion Alternative
-        (
-          label: 'Outline (Docs/Notion Alternative)',
-          name: 'outline',
-          image: 'outlinewiki/outline:latest',
-          port: 3000,
-        ),
-
-        // Google Analytics Alternative
-        (
-          label: 'Umami (Analytics Alternative)',
-          name: 'umami',
-          image: 'ghcr.io/umami-software/umami:latest',
-          port: 3000,
-        ),
-
-        // Google Search Alternative
-        (
-          label: 'Whoogle (Private Search)',
-          name: 'whoogle',
-          image: 'benbusby/whoogle-search:latest',
-          port: 5000,
-        ),
-
-        // Trello / Jira Alternative
-        (
-          label: 'Focalboard (Project Management)',
-          name: 'focalboard',
-          image: 'mattermost/focalboard:latest',
-          port: 8000,
-        ),
-
-        // Slack / Discord Alternative
-        (
-          label: 'Mattermost (Chat Alternative)',
-          name: 'mattermost',
-          image: 'mattermost/mattermost-team-edition:latest',
-          port: 8065,
-        ),
-
-        // GitHub Alternative
-        (
-          label: 'Gitea (Git Server)',
-          name: 'gitea',
-          image: 'gitea/gitea:latest',
-          port: 3000,
-        ),
-
-        // Google Forms Alternative
-        (
-          label: 'NocoDB (Airtable Alternative)',
-          name: 'nocodb',
-          image: 'nocodb/nocodb:latest',
-          port: 8080,
-        ),
-
-        // Stripe Dashboard-ish internal admin
-        (
-          label: 'Adminer (Database Viewer)',
-          name: 'adminer',
-          image: 'adminer:latest',
-          port: 8080,
-        ),
-
-        // Grafana Cloud Alternative
-        (
-          label: 'Grafana (Metrics Dashboard)',
-          name: 'grafana',
-          image: 'grafana/grafana:latest',
-          port: 3000,
-        ),
-      ];
+  static const templates = <({String label, String name, String image, int port})>[
+    (label: 'Test (nginx)', name: 'sovereignd-test', image: 'nginx:alpine', port: 80),
+    (label: 'Vaultwarden', name: 'vaultwarden', image: 'vaultwarden/server:latest', port: 80),
+    (label: 'Jellyfin', name: 'jellyfin', image: 'jellyfin/jellyfin:latest', port: 8096),
+    (label: 'Navidrome', name: 'navidrome', image: 'deluan/navidrome:latest', port: 4533),
+    (label: 'Minecraft', name: 'minecraft', image: 'itzg/minecraft-server:latest', port: 25565),
+    (label: 'Uptime Kuma', name: 'uptime-kuma', image: 'louislam/uptime-kuma:latest', port: 3001),
+    (label: 'Nextcloud (Drive Alternative)', name: 'nextcloud', image: 'nextcloud:latest', port: 80),
+    (label: 'Immich (Photos Alternative)', name: 'immich-server', image: 'ghcr.io/immich-app/immich-server:release', port: 2283),
+    (label: 'Outline (Docs/Notion Alternative)', name: 'outline', image: 'outlinewiki/outline:latest', port: 3000),
+    (label: 'Umami (Analytics Alternative)', name: 'umami', image: 'ghcr.io/umami-software/umami:latest', port: 3000),
+    (label: 'Whoogle (Private Search)', name: 'whoogle', image: 'benbusby/whoogle-search:latest', port: 5000),
+    (label: 'Focalboard (Project Management)', name: 'focalboard', image: 'mattermost/focalboard:latest', port: 8000),
+    (label: 'Mattermost (Chat Alternative)', name: 'mattermost', image: 'mattermost/mattermost-team-edition:latest', port: 8065),
+    (label: 'Gitea (Git Server)', name: 'gitea', image: 'gitea/gitea:latest', port: 3000),
+    (label: 'NocoDB (Airtable Alternative)', name: 'nocodb', image: 'nocodb/nocodb:latest', port: 8080),
+    (label: 'Adminer (Database Viewer)', name: 'adminer', image: 'adminer:latest', port: 8080),
+    (label: 'Grafana (Metrics Dashboard)', name: 'grafana', image: 'grafana/grafana:latest', port: 3000),
+  ];
 
   final _nameCtrl = TextEditingController();
   final _imageCtrl = TextEditingController();
@@ -511,35 +813,40 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
 
   int _selectedTemplate = 0;
 
+  @override
+  void initState() {
+    super.initState();
+    _applyTemplate(_selectedTemplate);
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _imageCtrl.dispose();
+    _portCtrl.dispose();
+    super.dispose();
+  }
+
   String _suggestNameFromImage(String image) {
-    // Take the last path segment, strip tag/digest.
     var base = image.trim();
     if (base.isEmpty) return 'service';
 
-    // Remove any leading command fragments just in case.
-    base = base
-        .replaceAll(RegExp(r'^docker\s+pull\s+', caseSensitive: false), '')
-        .trim();
+    base = base.replaceAll(RegExp(r'^docker\s+pull\s+', caseSensitive: false), '').trim();
 
-    // Trim quotes.
-    if ((base.startsWith('"') && base.endsWith('"')) ||
-        (base.startsWith("'") && base.endsWith("'"))) {
+    if ((base.startsWith('"') && base.endsWith('"')) || (base.startsWith("'") && base.endsWith("'"))) {
       base = base.substring(1, base.length - 1);
     }
 
-    // Strip registry path to last segment.
     final slash = base.lastIndexOf('/');
     if (slash >= 0 && slash < base.length - 1) {
       base = base.substring(slash + 1);
     }
 
-    // Strip tag or digest.
     final colon = base.indexOf(':');
     if (colon > 0) base = base.substring(0, colon);
     final at = base.indexOf('@');
     if (at > 0) base = base.substring(0, at);
 
-    // Sanitize.
     base = base.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-');
     base = base.replaceAll(RegExp(r'^-+|-+$'), '');
     if (base.isEmpty) base = 'service';
@@ -549,21 +856,17 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
   }
 
   String? _extractImageFromPaste(String input) {
-    var s = input.trim();
-    if (s.isEmpty) return null;
+    final text = input.trim();
+    if (text.isEmpty) return null;
 
-    // Common copy/paste from docs or Docker Desktop buttons.
-    // Support: `docker pull <image>`
     final pull = RegExp(r'\bdocker\s+pull\s+([^\s]+)', caseSensitive: false);
-    final pullMatch = pull.firstMatch(s);
-    if (pullMatch != null) {
-      return pullMatch.group(1)?.trim();
+    final match = pull.firstMatch(text);
+    if (match != null) {
+      return match.group(1)?.trim();
     }
 
-    // If user pastes just an image name, accept it.
-    // Basic heuristic: contains a slash or colon tag, and no spaces.
-    if (!s.contains(' ') && (s.contains('/') || s.contains(':'))) {
-      return s;
+    if (!text.contains(' ') && (text.contains('/') || text.contains(':'))) {
+      return text;
     }
 
     return null;
@@ -588,9 +891,7 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Clipboard does not look like an image or `docker pull <image>` command.',
-          ),
+          content: Text('Clipboard does not look like an image or `docker pull <image>` command.'),
         ),
       );
       return;
@@ -598,46 +899,31 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
 
     setState(() {
       _imageCtrl.text = image;
-      // If the name looks like it came from a template, keep it; otherwise auto-suggest.
       if (_nameCtrl.text.trim().isEmpty) {
         _nameCtrl.text = _suggestNameFromImage(image);
       }
     });
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _applyTemplate(_selectedTemplate);
-  }
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _imageCtrl.dispose();
-    _portCtrl.dispose();
-    super.dispose();
-  }
-
   void _applyTemplate(int index) {
-    final t = templates[index];
+    final template = templates[index];
     final suffix = Random().nextInt(9000) + 1000;
-    _nameCtrl.text = '${t.name}-$suffix';
-    _imageCtrl.text = t.image;
-    _portCtrl.text = t.port.toString();
+    _nameCtrl.text = '${template.name}-$suffix';
+    _imageCtrl.text = template.image;
+    _portCtrl.text = template.port.toString();
   }
 
   void _createService() {
     final valid = _formKey.currentState?.validate() ?? false;
     if (!valid) return;
 
-    final name = _nameCtrl.text.trim();
-    final image = _imageCtrl.text.trim();
-    final port = int.parse(_portCtrl.text.trim());
-
     Navigator.of(context).pop();
     widget.bloc.add(
-      MainCreateServiceRequested(name: name, image: image, containerPort: port),
+      MainCreateServiceRequested(
+        name: _nameCtrl.text.trim(),
+        image: _imageCtrl.text.trim(),
+        containerPort: int.parse(_portCtrl.text.trim()),
+      ),
     );
   }
 
@@ -651,12 +937,7 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
     final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
 
     return Padding(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 12,
-        bottom: 16 + bottomPadding,
-      ),
+      padding: EdgeInsets.only(left: 16, right: 16, top: 12, bottom: 16 + bottomPadding),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -664,10 +945,7 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
           Row(
             children: [
               Expanded(
-                child: Text(
-                  'Create service',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
+                child: Text('Create service', style: Theme.of(context).textTheme.titleLarge),
               ),
               IconButton(
                 tooltip: 'Docker Hub',
@@ -682,7 +960,6 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
             ],
           ),
           const SizedBox(height: 12),
-
           Text('Template', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
           DropdownButtonFormField<int>(
@@ -694,17 +971,15 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
                   child: Text(templates[i].label),
                 ),
             ],
-            onChanged: (v) {
-              if (v == null) return;
+            onChanged: (value) {
+              if (value == null) return;
               setState(() {
-                _selectedTemplate = v;
-                _applyTemplate(v);
+                _selectedTemplate = value;
+                _applyTemplate(value);
               });
             },
           ),
-
           const SizedBox(height: 12),
-
           Form(
             key: _formKey,
             child: Column(
@@ -717,22 +992,17 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
                     hintText: 'e.g. jellyfin-1234',
                   ),
                   textInputAction: TextInputAction.next,
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'Name is required'
-                      : null,
+                  validator: (value) => (value == null || value.trim().isEmpty) ? 'Name is required' : null,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _imageCtrl,
                   decoration: const InputDecoration(
                     labelText: 'Image',
-                    hintText:
-                        'e.g. nginx:alpine  (or paste: docker pull mcp/grafana)',
+                    hintText: 'e.g. nginx:alpine  (or paste: docker pull grafana/grafana)',
                   ),
                   textInputAction: TextInputAction.next,
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'Image is required'
-                      : null,
+                  validator: (value) => (value == null || value.trim().isEmpty) ? 'Image is required' : null,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -742,21 +1012,20 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
                     hintText: 'e.g. 80',
                   ),
                   keyboardType: TextInputType.number,
-                  validator: (v) {
-                    final raw = v?.trim();
+                  validator: (value) {
+                    final raw = value?.trim();
                     if (raw == null || raw.isEmpty) return 'Port is required';
-                    final p = int.tryParse(raw);
-                    if (p == null || p <= 0 || p > 65535)
+                    final parsed = int.tryParse(raw);
+                    if (parsed == null || parsed <= 0 || parsed > 65535) {
                       return 'Port must be 1-65535';
+                    }
                     return null;
                   },
                 ),
               ],
             ),
           ),
-
           const SizedBox(height: 16),
-
           Row(
             children: [
               Expanded(

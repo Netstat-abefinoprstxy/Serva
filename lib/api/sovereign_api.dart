@@ -102,6 +102,83 @@ class SovereignApi {
     }
   }
 
+  Future<GoActionResponse> restartService(String id) async {
+    final res = await http.post(_u('/services/restart', {'id': id}));
+    if (res.statusCode >= 400) {
+      throw Exception('Restart failed (${res.statusCode}): ${res.body}');
+    }
+
+    final json = jsonDecode(res.body);
+    if (json is Map<String, dynamic>) {
+      return GoActionResponse.fromJson(json);
+    }
+
+    throw Exception('Unexpected /services/restart response: ${res.body}');
+  }
+
+  Future<GoActionResponse> removeService(String id) async {
+    final res = await http.delete(_u('/services/remove', {'id': id}));
+    if (res.statusCode >= 400) {
+      throw Exception('Remove failed (${res.statusCode}): ${res.body}');
+    }
+
+    final json = jsonDecode(res.body);
+    if (json is Map<String, dynamic>) {
+      return GoActionResponse.fromJson(json);
+    }
+
+    throw Exception('Unexpected /services/remove response: ${res.body}');
+  }
+
+  Future<GoLogsResponse> serviceLogs(String id, {String tail = '200', bool stdout = true, bool stderr = true}) async {
+    final res = await http.get(
+      _u('/services/logs', {
+        'id': id,
+        'tail': tail,
+        'stdout': stdout ? '1' : '0',
+        'stderr': stderr ? '1' : '0',
+      }),
+    );
+    if (res.statusCode >= 400) {
+      throw Exception('Logs failed (${res.statusCode}): ${res.body}');
+    }
+
+    final json = jsonDecode(res.body);
+    if (json is Map<String, dynamic>) {
+      return GoLogsResponse.fromJson(json);
+    }
+
+    throw Exception('Unexpected /services/logs response: ${res.body}');
+  }
+
+  Future<GoStatsResponse> serviceStats(String id) async {
+    final res = await http.get(_u('/services/stats', {'id': id}));
+    if (res.statusCode >= 400) {
+      throw Exception('Stats failed (${res.statusCode}): ${res.body}');
+    }
+
+    final json = jsonDecode(res.body);
+    if (json is Map<String, dynamic>) {
+      return GoStatsResponse.fromJson(json);
+    }
+
+    throw Exception('Unexpected /services/stats response: ${res.body}');
+  }
+
+  Future<GoInspectResponse> serviceInspect(String id) async {
+    final res = await http.get(_u('/services/inspect', {'id': id}));
+    if (res.statusCode >= 400) {
+      throw Exception('Inspect failed (${res.statusCode}): ${res.body}');
+    }
+
+    final json = jsonDecode(res.body);
+    if (json is Map<String, dynamic>) {
+      return GoInspectResponse.fromJson(json);
+    }
+
+    throw Exception('Unexpected /services/inspect response: ${res.body}');
+  }
+
   /// POST /services/expose-lan?id=...
   /// Makes the service accessible on the local network (LAN).
   Future<void> exposeServiceLan(String id, {bool enabled = true}) async {

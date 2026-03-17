@@ -34,6 +34,16 @@ class MainStopRequested extends MainEvent {
   final String id;
 }
 
+class MainRestartRequested extends MainEvent {
+  const MainRestartRequested({required this.id});
+  final String id;
+}
+
+class MainRemoveRequested extends MainEvent {
+  const MainRemoveRequested({required this.id});
+  final String id;
+}
+
 /// Expose or un-expose a managed service to the local network (LAN).
 class MainExposeLanRequested extends MainEvent {
   const MainExposeLanRequested({required this.id, this.enabled = true});
