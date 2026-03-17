@@ -46,7 +46,7 @@ msix_config:
   publisher_display_name: Netstat
   identity_name: Netstat.Serva
   publisher: CN=D2749BB3-3A15-4469-B2DC-E69B344AE8C6
-  msix_version: 1.0.0.0
+  msix_version: 1.0.0.1
   logo_path: windows/runner/resources/app_icon.png
   store: true
   install_certificate: false
