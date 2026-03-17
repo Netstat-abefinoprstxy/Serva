@@ -2,6 +2,7 @@ part of '../template_gallery_screen.dart';
 
 bool _isVerifiedTemplate(_TemplateCardModel template) {
   return template.name == 'navidrome' ||
+      template.name == 'uptime-kuma' ||
       template.name == 'jellyfin' ||
       template.name == 'sovereignd-test';
 }

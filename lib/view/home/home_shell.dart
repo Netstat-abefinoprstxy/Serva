@@ -38,9 +38,9 @@ class _HomeTabbedShellState extends State<_HomeTabbedShell> {
       case 0:
         return 'Serva Dashboard';
       case 1:
-        return 'Quick Launch';
-      case 2:
         return 'Serva Services';
+      case 2:
+        return 'Quick Launch';
       case 3:
         return 'Serva Legacy';
       default:
@@ -93,7 +93,6 @@ class _HomeTabbedShellState extends State<_HomeTabbedShell> {
           if (loadedState != null) {
             final pages = [
               DashboardScreen(state: loadedState),
-              const TemplateGalleryScreen(),
               ServicesOverviewScreen(
                 state: loadedState,
                 legacyModeEnabled: _legacyModeEnabled,
@@ -106,6 +105,7 @@ class _HomeTabbedShellState extends State<_HomeTabbedShell> {
                   });
                 },
               ),
+              const TemplateGalleryScreen(),
               if (_legacyModeEnabled)
                 _LoadedView(
                   state: loadedState,
@@ -143,14 +143,14 @@ class _HomeTabbedShellState extends State<_HomeTabbedShell> {
             label: 'Dashboard',
           ),
           const NavigationDestination(
-            icon: Icon(Icons.grid_view_rounded),
-            selectedIcon: Icon(Icons.grid_view),
-            label: 'Launch',
-          ),
-          const NavigationDestination(
             icon: Icon(Icons.dns_outlined),
             selectedIcon: Icon(Icons.dns_rounded),
             label: 'Services',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.grid_view_rounded),
+            selectedIcon: Icon(Icons.grid_view),
+            label: 'Launch',
           ),
           if (_legacyModeEnabled)
             const NavigationDestination(

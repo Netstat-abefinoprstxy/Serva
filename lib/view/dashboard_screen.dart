@@ -19,6 +19,7 @@ part 'dashboard/dashboard_models.dart';
 part 'dashboard/dashboard_metric_widgets.dart';
 part 'dashboard/dashboard_header_widgets.dart';
 part 'dashboard/dashboard_activity_widgets.dart';
+part 'dashboard/dashboard_quick_links.dart';
 part 'dashboard/dashboard_support_banner.dart';
 part 'dashboard/dashboard_mission_panel.dart';
 part 'dashboard/dashboard_painters.dart';
@@ -162,6 +163,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             scale: uiScale,
           ),
+          SizedBox(height: 8 * uiScale),
+          _QuickLinksPanel(services: services, scale: uiScale),
           SizedBox(height: 8 * uiScale),
           FutureBuilder<_DashboardMetrics>(
             future: _metricsFuture,
