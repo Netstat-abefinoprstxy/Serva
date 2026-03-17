@@ -11,6 +11,7 @@ import 'package:serva/bloc/main_bloc.dart';
 import 'package:serva/bloc/main_event.dart';
 import 'package:serva/bloc/main_state.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'service_details_sheet.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key, required this.state});
@@ -25,15 +26,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final ServaApi _api = ServaApi();
   late Future<_DashboardMetrics> _metricsFuture;
   Timer? _refreshTimer;
+  Timer? _graphTimer;
+  final List<double> _cpuHistory = [];
+  final List<double> _memoryHistory = [];
+  final List<double> _networkHistory = [];
+  final List<double> _storageHistory = [];
+  double _latestCpuSample = 0;
+  double _latestMemorySample = 0;
+  double _latestNetworkSample = 0;
+  double _latestStorageSample = 0;
+  double? _lastNetworkObservedBytes;
+  DateTime? _lastNetworkObservedAt;
+  int _graphTick = 0;
 
   @override
   void initState() {
     super.initState();
     _metricsFuture = _loadMetrics();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 12), (_) {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       if (!mounted) return;
       setState(() {
         _metricsFuture = _loadMetrics();
+      });
+    });
+    _graphTimer = Timer.periodic(const Duration(milliseconds: 350), (_) {
+      if (!mounted) return;
+      setState(() {
+        _graphTick++;
+        _pushHistory(_cpuHistory, _latestCpuSample);
+        _pushHistory(_memoryHistory, _latestMemorySample);
+        _pushHistory(_networkHistory, _latestNetworkSample);
+        _pushHistory(_storageHistory, _latestStorageSample);
       });
     });
   }
@@ -51,52 +74,113 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _graphTimer?.cancel();
     super.dispose();
   }
 
   Future<_DashboardMetrics> _loadMetrics() async {
     final services = widget.state.services;
+    final definitions = widget.state.definitions;
     final serviceStats = await Future.wait(
       services.map((service) async {
         try {
-          return await _api.serviceStats(service.id);
+          final stats = await _api.serviceStats(service.id);
+          return MapEntry(service, stats);
         } catch (_) {
           return null;
         }
       }),
     );
 
-    final usableStats = serviceStats.whereType<GoStatsResponse>().toList();
+    final usableStats = serviceStats.whereType<MapEntry<GoService, GoStatsResponse>>().toList();
     final hostMetrics = await _loadHostMetrics();
+    final storageMetrics = await _loadServaStorageMetrics(definitions);
 
-    final containerCpu = usableStats.fold<double>(0, (sum, stat) => sum + _cpuPercentFromStats(stat.raw));
-    final containerMemoryBytes = usableStats.fold<double>(
-      0,
-      (sum, stat) => sum + _memoryUsageBytesFromStats(stat.raw),
-    );
-    final containerNetworkBytes = usableStats.fold<double>(
-      0,
-      (sum, stat) => sum + _networkBytesFromStats(stat.raw),
-    );
+    final liveServiceMetrics = <String, _ServiceLiveMetrics>{};
+    var containerCpu = 0.0;
+    var containerMemoryBytes = 0.0;
+    var containerNetworkRxBytes = 0.0;
+    var containerNetworkTxBytes = 0.0;
+
+    for (final entry in usableStats) {
+      final service = entry.key;
+      final raw = entry.value.raw;
+      final serviceMetrics = _ServiceLiveMetrics(
+        cpuPercent: _cpuPercentFromStats(raw),
+        memoryUsageBytes: _memoryUsageBytesFromStats(raw),
+        memoryLimitBytes: _memoryLimitBytesFromStats(raw),
+        networkRxBytes: _networkRxBytesFromStats(raw),
+        networkTxBytes: _networkTxBytesFromStats(raw),
+        readAt: entry.value.readAt,
+      );
+      liveServiceMetrics[service.id] = serviceMetrics;
+      containerCpu += serviceMetrics.cpuPercent;
+      containerMemoryBytes += serviceMetrics.memoryUsageBytes;
+      containerNetworkRxBytes += serviceMetrics.networkRxBytes;
+      containerNetworkTxBytes += serviceMetrics.networkTxBytes;
+    }
+
+    final totalNetworkBytes = containerNetworkRxBytes + containerNetworkTxBytes;
+    final now = DateTime.now();
+    final previousNetworkBytes = _lastNetworkObservedBytes;
+    final previousNetworkAt = _lastNetworkObservedAt;
+    var networkRateBytesPerSecond = 0.0;
+    if (previousNetworkBytes != null && previousNetworkAt != null) {
+      final elapsedMs = now.difference(previousNetworkAt).inMilliseconds;
+      final deltaBytes = totalNetworkBytes - previousNetworkBytes;
+      if (elapsedMs > 0 && deltaBytes >= 0) {
+        networkRateBytesPerSecond = deltaBytes / (elapsedMs / 1000);
+      }
+    }
+    _lastNetworkObservedBytes = totalNetworkBytes;
+    _lastNetworkObservedAt = now;
+
+    _latestCpuSample = containerCpu;
+    _latestMemorySample = _bytesToMegabytes(containerMemoryBytes);
+    _latestNetworkSample = _bytesToMegabytes(networkRateBytesPerSecond);
+    _latestStorageSample = _bytesToMegabytes(storageMetrics.totalBytes);
+
+    if (_cpuHistory.isEmpty) {
+      _pushHistory(_cpuHistory, _latestCpuSample);
+      _pushHistory(_memoryHistory, _latestMemorySample);
+      _pushHistory(_networkHistory, _latestNetworkSample);
+      _pushHistory(_storageHistory, _latestStorageSample);
+    }
 
     return _DashboardMetrics(
       hostCpuPercent: hostMetrics.cpuPercent,
       hostMemoryPercent: hostMetrics.memoryPercent,
       hostStoragePercent: hostMetrics.storagePercent,
+      hostMemoryUsedBytes: hostMetrics.memoryUsedBytes,
+      hostMemoryTotalBytes: hostMetrics.memoryTotalBytes,
+      hostStorageUsedBytes: hostMetrics.storageUsedBytes,
+      hostStorageTotalBytes: hostMetrics.storageTotalBytes,
+      servaStorageUsedBytes: storageMetrics.totalBytes,
       containerCpuPercent: containerCpu,
       containerMemoryBytes: containerMemoryBytes,
-      containerNetworkBytes: containerNetworkBytes,
+      containerNetworkRxBytes: containerNetworkRxBytes,
+      containerNetworkTxBytes: containerNetworkTxBytes,
       liveStatsCount: usableStats.length,
-      cpuSeries: _buildSeriesFromSeed(hostMetrics.cpuPercent.round(), 18, 14),
-      memorySeries: _buildSeriesFromSeed(hostMetrics.memoryPercent.round(), 15, 10),
-      networkSeries: _buildSeriesFromSeed((_bytesToMegabytes(containerNetworkBytes)).round(), 20, 18),
-      storageSeries: _buildSeriesFromSeed(hostMetrics.storagePercent.round(), 12, 7),
+      liveServiceMetrics: liveServiceMetrics,
+      serviceStorageBytes: storageMetrics.serviceBytes,
+      cpuSeries: List<double>.from(_cpuHistory),
+      memorySeries: List<double>.from(_memoryHistory),
+      networkSeries: List<double>.from(_networkHistory),
+      storageSeries: List<double>.from(_storageHistory),
     );
   }
 
   Future<_HostMetrics> _loadHostMetrics() async {
     if (!Platform.isWindows) {
-      return const _HostMetrics(cpuPercent: 0, memoryPercent: 0, storagePercent: 0);
+      return const _HostMetrics(
+        cpuPercent: 0,
+        memoryPercent: 0,
+        storagePercent: 0,
+        memoryUsedBytes: 0,
+        memoryTotalBytes: 0,
+        storageUsedBytes: 0,
+        storageTotalBytes: 0,
+      );
     }
 
     try {
@@ -111,10 +195,19 @@ $freeMemory = [double]$os.FreePhysicalMemory
 $memoryPercent = if ($totalMemory -gt 0) { (($totalMemory - $freeMemory) / $totalMemory) * 100 } else { 0 }
 $drive = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='__DRIVE__'"
 $storagePercent = if ($drive -and [double]$drive.Size -gt 0) { (([double]$drive.Size - [double]$drive.FreeSpace) / [double]$drive.Size) * 100 } else { 0 }
+$usedMemory = ($totalMemory - $freeMemory) * 1KB
+$totalMemoryBytes = $totalMemory * 1KB
+$freeSpace = if ($drive) { [double]$drive.FreeSpace } else { 0 }
+$driveSize = if ($drive) { [double]$drive.Size } else { 0 }
+$usedStorage = if ($driveSize -gt 0) { $driveSize - $freeSpace } else { 0 }
 @{
   cpu = [math]::Round($cpu, 1)
   memory = [math]::Round($memoryPercent, 1)
   storage = [math]::Round($storagePercent, 1)
+  memoryUsed = [math]::Round($usedMemory, 0)
+  memoryTotal = [math]::Round($totalMemoryBytes, 0)
+  storageUsed = [math]::Round($usedStorage, 0)
+  storageTotal = [math]::Round($driveSize, 0)
 } | ConvertTo-Json -Compress
 '''.replaceAll('__DRIVE__', drive);
 
@@ -124,26 +217,136 @@ $storagePercent = if ($drive -and [double]$drive.Size -gt 0) { (([double]$drive.
       );
 
       if (result.exitCode != 0) {
-        return const _HostMetrics(cpuPercent: 0, memoryPercent: 0, storagePercent: 0);
+        return const _HostMetrics(
+          cpuPercent: 0,
+          memoryPercent: 0,
+          storagePercent: 0,
+          memoryUsedBytes: 0,
+          memoryTotalBytes: 0,
+          storageUsedBytes: 0,
+          storageTotalBytes: 0,
+        );
       }
 
       final raw = result.stdout.toString().trim();
       if (raw.isEmpty) {
-        return const _HostMetrics(cpuPercent: 0, memoryPercent: 0, storagePercent: 0);
+        return const _HostMetrics(
+          cpuPercent: 0,
+          memoryPercent: 0,
+          storagePercent: 0,
+          memoryUsedBytes: 0,
+          memoryTotalBytes: 0,
+          storageUsedBytes: 0,
+          storageTotalBytes: 0,
+        );
       }
 
       final json = jsonDecode(raw);
       if (json is! Map) {
-        return const _HostMetrics(cpuPercent: 0, memoryPercent: 0, storagePercent: 0);
+        return const _HostMetrics(
+          cpuPercent: 0,
+          memoryPercent: 0,
+          storagePercent: 0,
+          memoryUsedBytes: 0,
+          memoryTotalBytes: 0,
+          storageUsedBytes: 0,
+          storageTotalBytes: 0,
+        );
       }
 
       return _HostMetrics(
         cpuPercent: _asDouble(json['cpu']),
         memoryPercent: _asDouble(json['memory']),
         storagePercent: _asDouble(json['storage']),
+        memoryUsedBytes: _asDouble(json['memoryUsed']),
+        memoryTotalBytes: _asDouble(json['memoryTotal']),
+        storageUsedBytes: _asDouble(json['storageUsed']),
+        storageTotalBytes: _asDouble(json['storageTotal']),
       );
     } catch (_) {
-      return const _HostMetrics(cpuPercent: 0, memoryPercent: 0, storagePercent: 0);
+      return const _HostMetrics(
+        cpuPercent: 0,
+        memoryPercent: 0,
+        storagePercent: 0,
+        memoryUsedBytes: 0,
+        memoryTotalBytes: 0,
+        storageUsedBytes: 0,
+        storageTotalBytes: 0,
+      );
+    }
+  }
+
+  Future<_ServaStorageMetrics> _loadServaStorageMetrics(List<GoServiceDefinition> definitions) async {
+    final basePath = _servaManagedBasePath();
+    final serviceRoots = <String, String>{};
+
+    for (final definition in definitions) {
+      final root = _serviceMountRootFromDefinition(definition);
+      if (root != null && root.startsWith(basePath)) {
+        serviceRoots[definition.name] = root;
+      }
+    }
+
+    final command = StringBuffer()
+      ..writeln("\$base = '${_psEscape(basePath)}'")
+      ..writeln("\$result = [ordered]@{}")
+      ..writeln("if (Test-Path -LiteralPath \$base) {")
+      ..writeln("  \$total = (Get-ChildItem -LiteralPath \$base -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum")
+      ..writeln("  \$result.total = if (\$null -eq \$total) { 0 } else { [double]\$total }")
+      ..writeln("} else {")
+      ..writeln("  \$result.total = 0")
+      ..writeln("}")
+      ..writeln("\$services = [ordered]@{}");
+
+    serviceRoots.forEach((name, path) {
+      command
+        ..writeln("\$servicePath = '${_psEscape(path)}'")
+        ..writeln("if (Test-Path -LiteralPath \$servicePath) {")
+        ..writeln("  \$sum = (Get-ChildItem -LiteralPath \$servicePath -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum")
+        ..writeln("  \$services['${_psEscape(name)}'] = if (\$null -eq \$sum) { 0 } else { [double]\$sum }")
+        ..writeln("} else {")
+        ..writeln("  \$services['${_psEscape(name)}'] = 0")
+        ..writeln("}");
+    });
+
+    command
+      ..writeln("\$result.services = \$services")
+      ..writeln("\$result | ConvertTo-Json -Compress");
+
+    try {
+      final result = await Process.run(
+        'powershell',
+        ['-NoProfile', '-Command', command.toString()],
+      );
+
+      if (result.exitCode != 0) {
+        return const _ServaStorageMetrics(totalBytes: 0, serviceBytes: {});
+      }
+
+      final raw = result.stdout.toString().trim();
+      if (raw.isEmpty) {
+        return const _ServaStorageMetrics(totalBytes: 0, serviceBytes: {});
+      }
+
+      final json = jsonDecode(raw);
+      if (json is! Map) {
+        return const _ServaStorageMetrics(totalBytes: 0, serviceBytes: {});
+      }
+
+      final servicesJson = json['services'];
+      final serviceBytes = <String, double>{};
+      if (servicesJson is Map) {
+        for (final entry in servicesJson.entries) {
+          serviceBytes[entry.key.toString()] = _asDouble(entry.value);
+        }
+      }
+
+      return _ServaStorageMetrics(
+        totalBytes: _asDouble(json['total']),
+        serviceBytes: serviceBytes,
+      );
+    } catch (_) {
+      return const _ServaStorageMetrics(totalBytes: 0, serviceBytes: {});
     }
   }
 
@@ -186,14 +389,6 @@ $storagePercent = if ($drive -and [double]$drive.Size -gt 0) { (([double]$drive.
             ),
           ),
           const SizedBox(height: 8),
-          _ServiceControlPanel(services: services),
-          if (savedOnlyDefinitions > 0) ...[
-            const SizedBox(height: 8),
-            _InactiveServicePanel(
-              definitions: definitions.where((definition) => !definition.isDeployed).toList(),
-            ),
-          ],
-          const SizedBox(height: 8),
           _HeroPanel(
             healthOk: widget.state.healthOk,
             runningServices: runningServices,
@@ -207,13 +402,16 @@ $storagePercent = if ($drive -and [double]$drive.Size -gt 0) { (([double]$drive.
             future: _metricsFuture,
             builder: (context, snapshot) {
               final metrics = snapshot.data;
-              final cpuUsage = _boundedValue((metrics?.hostCpuPercent ?? 0).round(), 0, 100);
-              final memoryUsage = _boundedValue((metrics?.hostMemoryPercent ?? 0).round(), 0, 100);
-              final storageUsage = _boundedValue((metrics?.hostStoragePercent ?? 0).round(), 0, 100);
               final containerCpu = _boundedValue((metrics?.containerCpuPercent ?? 0).round(), 0, 999);
-              final networkMegabytes = _bytesToMegabytes(metrics?.containerNetworkBytes ?? 0);
+              final networkMegabytes = _bytesToMegabytes(
+                (metrics?.containerNetworkRxBytes ?? 0) + (metrics?.containerNetworkTxBytes ?? 0),
+              );
               final containerMemoryMegabytes = _bytesToMegabytes(metrics?.containerMemoryBytes ?? 0);
               final liveStatsCount = metrics?.liveStatsCount ?? 0;
+              final cpuSeries = _cpuHistory.isEmpty ? (metrics?.cpuSeries ?? const <double>[]) : _cpuHistory;
+              final memorySeries = _memoryHistory.isEmpty ? (metrics?.memorySeries ?? const <double>[]) : _memoryHistory;
+              final networkSeries = _networkHistory.isEmpty ? (metrics?.networkSeries ?? const <double>[]) : _networkHistory;
+              final storageSeries = _storageHistory.isEmpty ? (metrics?.storageSeries ?? const <double>[]) : _storageHistory;
 
               final width = MediaQuery.of(context).size.width;
               final crossAxisCount = width >= 1400
@@ -231,48 +429,59 @@ $storagePercent = if ($drive -and [double]$drive.Size -gt 0) { (([double]$drive.
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
                   _StatCard(
-                    label: 'Host CPU',
-                    value: '$cpuUsage%',
-                    caption: 'Real Windows CPU load',
+                    label: 'Serva CPU',
+                    value: '${metrics?.containerCpuPercent.toStringAsFixed(1) ?? '0.0'}%',
+                    caption: liveStatsCount == 0
+                        ? 'No live container CPU data yet'
+                        : 'Aggregate CPU across active services',
                     color: const Color(0xFF4CC9F0),
                     icon: Icons.memory_rounded,
-                    series: metrics?.cpuSeries ?? _buildSeriesFromSeed(cpuUsage, 18, 10),
+                    series: cpuSeries,
+                    graphTick: _graphTick,
+                    footer: 'Host load context: ${metrics?.hostCpuPercent.toStringAsFixed(1) ?? '0.0'}%',
                   ),
                   _StatCard(
-                    label: 'Host Memory',
-                    value: '$memoryUsage%',
-                    caption: 'Physical memory in use',
+                    label: 'Serva Memory',
+                    value: _formatBytes(metrics?.containerMemoryBytes ?? 0),
+                    caption: liveStatsCount == 0
+                        ? 'No live container memory data yet'
+                        : 'Total memory used by active services',
                     color: const Color(0xFF80ED99),
                     icon: Icons.stacked_line_chart_rounded,
-                    series: metrics?.memorySeries ?? _buildSeriesFromSeed(memoryUsage, 18, 10),
+                    series: memorySeries,
+                    graphTick: _graphTick,
+                    footer:
+                        'Host memory context: ${_formatBytes(metrics?.hostMemoryUsedBytes ?? 0)} / ${_formatBytes(metrics?.hostMemoryTotalBytes ?? 0)}',
                   ),
                   _StatCard(
-                    label: 'Containers',
-                    value: '${containerCpu.toString()}%',
+                    label: 'Serva Network',
+                    value: _formatBytes((metrics?.containerNetworkRxBytes ?? 0) + (metrics?.containerNetworkTxBytes ?? 0)),
                     caption: liveStatsCount == 0
                         ? 'No live Docker stats yet'
-                        : '${containerMemoryMegabytes.toStringAsFixed(1)} MB memory in live services',
+                        : 'Live network usage across active services',
                     color: const Color(0xFFFFC857),
                     icon: Icons.wifi_tethering_rounded,
-                    series: metrics?.networkSeries ??
-                        _buildSeriesFromSeed(networkMegabytes.round(), 18, 16),
+                    series: networkSeries,
+                    graphTick: _graphTick,
                     footer: liveStatsCount == 0
                         ? 'Waiting for container stats'
-                        : '${networkMegabytes.toStringAsFixed(1)} MB network I/O observed',
+                        : '${_formatBytes(metrics?.containerNetworkRxBytes ?? 0)} rx / ${_formatBytes(metrics?.containerNetworkTxBytes ?? 0)} tx  |  ${_formatBytes(_megabytesToBytes(_latestNetworkSample))}/s',
                   ),
                   _StatCard(
-                    label: 'Host Storage',
-                    value: '$storageUsage%',
-                    caption: 'Disk usage on the Serva drive',
+                    label: 'Serva Storage',
+                    value: _formatBytes(metrics?.servaStorageUsedBytes ?? 0),
+                    caption: 'Serva data stored under Documents\\Serva',
                     color: const Color(0xFFFF7B72),
                     icon: Icons.storage_rounded,
-                    series: metrics?.storageSeries ?? _buildSeriesFromSeed(storageUsage, 18, 8),
+                    series: storageSeries,
+                    graphTick: _graphTick,
+                    footer:
+                        'Drive usage: ${_formatBytes(metrics?.hostStorageUsedBytes ?? 0)} / ${_formatBytes(metrics?.hostStorageTotalBytes ?? 0)}',
                   ),
                 ],
               );
             },
           ),
-          const SizedBox(height: 8),
           LayoutBuilder(
             builder: (context, constraints) {
               final narrow = constraints.maxWidth < 900;
@@ -323,6 +532,14 @@ $storagePercent = if ($drive -and [double]$drive.Size -gt 0) { (([double]$drive.
     return value.clamp(min, max);
   }
 
+  List<double> _pushHistory(List<double> target, double sample, {int maxPoints = 36}) {
+    target.add(sample);
+    if (target.length > maxPoints) {
+      target.removeAt(0);
+    }
+    return List<double>.from(target);
+  }
+
   static List<double> _buildSeriesFromSeed(int seed, int points, int amplitude) {
     final random = Random(seed);
     return List<double>.generate(
@@ -337,9 +554,15 @@ $storagePercent = if ($drive -and [double]$drive.Size -gt 0) { (([double]$drive.
 }
 
 class _ServiceControlPanel extends StatelessWidget {
-  const _ServiceControlPanel({required this.services});
+  const _ServiceControlPanel({
+    required this.services,
+    required this.liveMetrics,
+    required this.serviceStorageBytes,
+  });
 
   final List<GoService> services;
+  final Map<String, _ServiceLiveMetrics> liveMetrics;
+  final Map<String, double> serviceStorageBytes;
 
   @override
   Widget build(BuildContext context) {
@@ -401,7 +624,12 @@ class _ServiceControlPanel extends StatelessWidget {
                     childAspectRatio: crossAxisCount == 1 ? 3.4 : crossAxisCount >= 4 ? 1.56 : crossAxisCount == 3 ? 1.72 : 2.3,
                   ),
                   itemBuilder: (context, index) {
-                    return _ServiceCommandTile(service: services[index]);
+                    final service = services[index];
+                    return _ServiceCommandTile(
+                      service: service,
+                      liveMetrics: liveMetrics[service.id],
+                      storageBytes: serviceStorageBytes[service.name],
+                    );
                   },
                 );
               },
@@ -481,9 +709,15 @@ class _InactiveServicePanel extends StatelessWidget {
 }
 
 class _ServiceCommandTile extends StatelessWidget {
-  const _ServiceCommandTile({required this.service});
+  const _ServiceCommandTile({
+    required this.service,
+    this.liveMetrics,
+    this.storageBytes,
+  });
 
   final GoService service;
+  final _ServiceLiveMetrics? liveMetrics;
+  final double? storageBytes;
 
   bool get _isRunning => service.state.toLowerCase() == 'running';
 
@@ -567,6 +801,11 @@ class _ServiceCommandTile extends StatelessWidget {
                 },
               ),
               _ActionChip(
+                label: 'Details',
+                icon: Icons.tune_rounded,
+                onTap: () => showServiceDetailsSheet(context, service),
+              ),
+              _ActionChip(
                 label: _isRunning ? 'Pause' : 'Start',
                 icon: _isRunning ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded,
                 onTap: () {
@@ -597,6 +836,34 @@ class _ServiceCommandTile extends StatelessWidget {
           ),
           const Spacer(),
           const SizedBox(height: 4),
+          if (liveMetrics != null) ...[
+            Wrap(
+              spacing: 12,
+              runSpacing: 4,
+              children: [
+                _ServiceMeta(
+                  label: 'CPU',
+                  value: '${liveMetrics!.cpuPercent.toStringAsFixed(1)}%',
+                ),
+                _ServiceMeta(
+                  label: 'RAM',
+                  value: liveMetrics!.memoryLimitBytes > 0
+                      ? '${_formatBytes(liveMetrics!.memoryUsageBytes)} / ${_formatBytes(liveMetrics!.memoryLimitBytes)}'
+                      : _formatBytes(liveMetrics!.memoryUsageBytes),
+                ),
+                _ServiceMeta(
+                  label: 'Net',
+                  value:
+                      '${_formatBytes(liveMetrics!.networkRxBytes)} rx / ${_formatBytes(liveMetrics!.networkTxBytes)} tx',
+                ),
+                _ServiceMeta(
+                  label: 'Data',
+                  value: _formatBytes(storageBytes ?? 0),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+          ],
           Row(
             children: [
               _ServiceMeta(label: 'Port', value: service.port > 0 ? '${service.port}' : 'none'),
@@ -1046,6 +1313,7 @@ class _StatCard extends StatelessWidget {
     required this.color,
     required this.icon,
     required this.series,
+    required this.graphTick,
     this.footer,
   });
 
@@ -1055,6 +1323,7 @@ class _StatCard extends StatelessWidget {
   final Color color;
   final IconData icon;
   final List<double> series;
+  final int graphTick;
   final String? footer;
 
   @override
@@ -1092,6 +1361,18 @@ class _StatCard extends StatelessWidget {
             ],
           ),
           const Spacer(),
+          SizedBox(
+            height: 104,
+            width: double.infinity,
+            child: CustomPaint(
+              painter: _HistoryBarsPainter(
+                values: series,
+                color: color,
+                tick: graphTick,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
           Text(
             value,
             style: theme.textTheme.headlineMedium?.copyWith(
@@ -1115,13 +1396,7 @@ class _StatCard extends StatelessWidget {
               ),
             ),
           ],
-          const SizedBox(height: 4),
-          SizedBox(
-            height: 18,
-            child: CustomPaint(
-              painter: _LineChartPainter(values: series, color: color),
-            ),
-          ),
+          const SizedBox(height: 6),
         ],
       ),
     );
@@ -1489,6 +1764,87 @@ class _LineChartPainter extends CustomPainter {
   }
 }
 
+class _HistoryBarsPainter extends CustomPainter {
+  _HistoryBarsPainter({
+    required this.values,
+    required this.color,
+    required this.tick,
+  });
+
+  final List<double> values;
+  final Color color;
+  final int tick;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.isEmpty) return;
+
+    final normalized = _normalizeSeries(values);
+    final count = normalized.length;
+    final gap = 2.0;
+    final barWidth = max(2.0, (size.width - ((count - 1) * gap)) / count);
+    final gridPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.035)
+      ..strokeWidth = 1;
+    final basePaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.06)
+      ..style = PaintingStyle.fill;
+    final barPaint = Paint()..style = PaintingStyle.fill;
+    final cursorPaint = Paint()
+      ..color = color.withValues(alpha: 0.9)
+      ..strokeWidth = 2.2
+      ..strokeCap = StrokeCap.round;
+    final cursorGlowPaint = Paint()
+      ..color = color.withValues(alpha: 0.18)
+      ..strokeWidth = 8
+      ..strokeCap = StrokeCap.round;
+
+    for (var row = 1; row < 4; row++) {
+      final y = (size.height / 4) * row;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
+
+    for (var i = 0; i < count; i++) {
+      final x = i * (barWidth + gap);
+      final barHeight = max(3.0, (normalized[i] / 100) * size.height);
+      final rect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(x, size.height - barHeight, barWidth, barHeight),
+        const Radius.circular(3),
+      );
+      final baseRect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(x, 0, barWidth, size.height),
+        const Radius.circular(3),
+      );
+
+      canvas.drawRRect(baseRect, basePaint);
+      final isLatest = i == count - 1;
+      final ageFactor = count <= 1 ? 1.0 : (i / (count - 1));
+      barPaint.color = isLatest
+          ? color
+          : color.withValues(alpha: 0.18 + (ageFactor * 0.55));
+      canvas.drawRRect(rect, barPaint);
+    }
+
+    final pulse = ((tick % 6) / 5).clamp(0, 1).toDouble();
+    final cursorX = max(0.0, size.width - (barWidth * (0.9 - (pulse * 0.2))));
+    canvas.drawLine(
+      Offset(cursorX, 6),
+      Offset(cursorX, size.height - 6),
+      cursorGlowPaint,
+    );
+    canvas.drawLine(
+      Offset(cursorX, 8),
+      Offset(cursorX, size.height - 8),
+      cursorPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _HistoryBarsPainter oldDelegate) {
+    return oldDelegate.values != values || oldDelegate.color != color || oldDelegate.tick != tick;
+  }
+}
+
 class _AreaChartPainter extends CustomPainter {
   _AreaChartPainter({required this.values, required this.color});
 
@@ -1651,10 +2007,18 @@ class _DashboardMetrics {
     required this.hostCpuPercent,
     required this.hostMemoryPercent,
     required this.hostStoragePercent,
+    required this.hostMemoryUsedBytes,
+    required this.hostMemoryTotalBytes,
+    required this.hostStorageUsedBytes,
+    required this.hostStorageTotalBytes,
+    required this.servaStorageUsedBytes,
     required this.containerCpuPercent,
     required this.containerMemoryBytes,
-    required this.containerNetworkBytes,
+    required this.containerNetworkRxBytes,
+    required this.containerNetworkTxBytes,
     required this.liveStatsCount,
+    required this.liveServiceMetrics,
+    required this.serviceStorageBytes,
     required this.cpuSeries,
     required this.memorySeries,
     required this.networkSeries,
@@ -1664,10 +2028,18 @@ class _DashboardMetrics {
   final double hostCpuPercent;
   final double hostMemoryPercent;
   final double hostStoragePercent;
+  final double hostMemoryUsedBytes;
+  final double hostMemoryTotalBytes;
+  final double hostStorageUsedBytes;
+  final double hostStorageTotalBytes;
+  final double servaStorageUsedBytes;
   final double containerCpuPercent;
   final double containerMemoryBytes;
-  final double containerNetworkBytes;
+  final double containerNetworkRxBytes;
+  final double containerNetworkTxBytes;
   final int liveStatsCount;
+  final Map<String, _ServiceLiveMetrics> liveServiceMetrics;
+  final Map<String, double> serviceStorageBytes;
   final List<double> cpuSeries;
   final List<double> memorySeries;
   final List<double> networkSeries;
@@ -1679,11 +2051,47 @@ class _HostMetrics {
     required this.cpuPercent,
     required this.memoryPercent,
     required this.storagePercent,
+    required this.memoryUsedBytes,
+    required this.memoryTotalBytes,
+    required this.storageUsedBytes,
+    required this.storageTotalBytes,
   });
 
   final double cpuPercent;
   final double memoryPercent;
   final double storagePercent;
+  final double memoryUsedBytes;
+  final double memoryTotalBytes;
+  final double storageUsedBytes;
+  final double storageTotalBytes;
+}
+
+class _ServiceLiveMetrics {
+  const _ServiceLiveMetrics({
+    required this.cpuPercent,
+    required this.memoryUsageBytes,
+    required this.memoryLimitBytes,
+    required this.networkRxBytes,
+    required this.networkTxBytes,
+    required this.readAt,
+  });
+
+  final double cpuPercent;
+  final double memoryUsageBytes;
+  final double memoryLimitBytes;
+  final double networkRxBytes;
+  final double networkTxBytes;
+  final String readAt;
+}
+
+class _ServaStorageMetrics {
+  const _ServaStorageMetrics({
+    required this.totalBytes,
+    required this.serviceBytes,
+  });
+
+  final double totalBytes;
+  final Map<String, double> serviceBytes;
 }
 
 double _cpuPercentFromStats(Map<String, dynamic> raw) {
@@ -1716,12 +2124,26 @@ double _memoryUsageBytesFromStats(Map<String, dynamic> raw) {
   return _asDouble(memory['usage']);
 }
 
-double _networkBytesFromStats(Map<String, dynamic> raw) {
+double _memoryLimitBytesFromStats(Map<String, dynamic> raw) {
+  final memory = _mapValue(raw['memory_stats']);
+  return _asDouble(memory['limit']);
+}
+
+double _networkRxBytesFromStats(Map<String, dynamic> raw) {
   final networks = _mapValue(raw['networks']);
   var total = 0.0;
   for (final value in networks.values) {
     final adapter = _mapValue(value);
     total += _asDouble(adapter['rx_bytes']);
+  }
+  return total;
+}
+
+double _networkTxBytesFromStats(Map<String, dynamic> raw) {
+  final networks = _mapValue(raw['networks']);
+  var total = 0.0;
+  for (final value in networks.values) {
+    final adapter = _mapValue(value);
     total += _asDouble(adapter['tx_bytes']);
   }
   return total;
@@ -1755,3 +2177,53 @@ double _asDouble(dynamic value) {
 }
 
 double _bytesToMegabytes(double value) => value / (1024 * 1024);
+
+double _megabytesToBytes(double value) => value * 1024 * 1024;
+
+String _formatBytes(double bytes) {
+  if (bytes <= 0) return '0 B';
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  var value = bytes;
+  var unitIndex = 0;
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+
+  final precision = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  return '${value.toStringAsFixed(precision)} ${units[unitIndex]}';
+}
+
+List<double> _normalizeSeries(List<double> values) {
+  if (values.isEmpty) return const [0];
+  final maxValue = values.reduce(max);
+  if (maxValue <= 0) {
+    return List<double>.filled(values.length, 0);
+  }
+  return values.map((value) => (value / maxValue) * 100).toList();
+}
+
+String _servaManagedBasePath() {
+  final userProfile = Platform.environment['USERPROFILE'];
+  if (userProfile != null && userProfile.trim().isNotEmpty) {
+    return '$userProfile\\Documents\\Serva';
+  }
+
+  final home = Platform.environment['HOME'];
+  if (home != null && home.trim().isNotEmpty) {
+    return '$home${Platform.pathSeparator}Documents${Platform.pathSeparator}Serva';
+  }
+
+  return 'Documents${Platform.pathSeparator}Serva';
+}
+
+String? _serviceMountRootFromDefinition(GoServiceDefinition definition) {
+  if (definition.mounts.isEmpty) return null;
+  final first = definition.mounts.first.source.trim();
+  if (first.isEmpty) return null;
+  return Directory(first).parent.path;
+}
+
+String _psEscape(String value) => value.replaceAll("'", "''");

@@ -71,12 +71,19 @@ class MainBloc extends Bloc<MainEvent, MainState> {
     required String failurePrefix,
   }) async {
     final previous = state;
-    emit(MainLoading(message: loadingMessage));
+    if (previous is! MainLoaded) {
+      emit(MainLoading(message: loadingMessage));
+    }
 
     try {
       await action();
       final snapshot = await _fetchSnapshot();
-      emit(_loadedFromSnapshot(snapshot, lastMessage: successMessage));
+      emit(
+        _loadedFromSnapshot(
+          snapshot,
+          lastMessage: successMessage,
+        ),
+      );
     } catch (e) {
       if (previous is MainLoaded) {
         emit(

@@ -3,9 +3,11 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter/services.dart';
 import 'package:serva/api/go_models.dart';
 import 'package:serva/bloc/main_bloc.dart';
 import 'package:serva/bloc/main_event.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class TemplateGalleryScreen extends StatelessWidget {
   const TemplateGalleryScreen({super.key});
@@ -82,6 +84,86 @@ class TemplateGalleryScreen extends StatelessWidget {
       accent: Color(0xFF8D99AE),
     ),
     _TemplateCardModel(
+      label: 'Immich',
+      subtitle: 'Photos',
+      description: 'Run a self-hosted photo library with managed app data storage.',
+      name: 'immich-server',
+      image: 'ghcr.io/immich-app/immich-server:release',
+      port: 2283,
+      icon: Icons.photo_library_outlined,
+      accent: Color(0xFF7BDFF2),
+    ),
+    _TemplateCardModel(
+      label: 'Outline',
+      subtitle: 'Docs',
+      description: 'Create a collaborative docs workspace similar to Notion.',
+      name: 'outline',
+      image: 'outlinewiki/outline:latest',
+      port: 3000,
+      icon: Icons.edit_document,
+      accent: Color(0xFFF7A072),
+    ),
+    _TemplateCardModel(
+      label: 'Umami',
+      subtitle: 'Analytics',
+      description: 'Lightweight web analytics with a one-click launch flow.',
+      name: 'umami',
+      image: 'ghcr.io/umami-software/umami:latest',
+      port: 3000,
+      icon: Icons.query_stats_rounded,
+      accent: Color(0xFFB8F2E6),
+    ),
+    _TemplateCardModel(
+      label: 'Whoogle',
+      subtitle: 'Search',
+      description: 'Private metasearch front end with a simple managed service setup.',
+      name: 'whoogle',
+      image: 'benbusby/whoogle-search:latest',
+      port: 5000,
+      icon: Icons.travel_explore_rounded,
+      accent: Color(0xFFA0C4FF),
+    ),
+    _TemplateCardModel(
+      label: 'Focalboard',
+      subtitle: 'Projects',
+      description: 'Kanban-style project management in a self-hosted service.',
+      name: 'focalboard',
+      image: 'mattermost/focalboard:latest',
+      port: 8000,
+      icon: Icons.view_kanban_outlined,
+      accent: Color(0xFFFFC6FF),
+    ),
+    _TemplateCardModel(
+      label: 'Mattermost',
+      subtitle: 'Chat',
+      description: 'Team chat and collaboration with persistent local storage.',
+      name: 'mattermost',
+      image: 'mattermost/mattermost-team-edition:latest',
+      port: 8065,
+      icon: Icons.forum_outlined,
+      accent: Color(0xFF9BF6FF),
+    ),
+    _TemplateCardModel(
+      label: 'NocoDB',
+      subtitle: 'Database UI',
+      description: 'Airtable-style interface for your data with a one-click setup.',
+      name: 'nocodb',
+      image: 'nocodb/nocodb:latest',
+      port: 8080,
+      icon: Icons.table_chart_outlined,
+      accent: Color(0xFFFFD166),
+    ),
+    _TemplateCardModel(
+      label: 'Adminer',
+      subtitle: 'DB Viewer',
+      description: 'Quick database inspection and management from a tiny container.',
+      name: 'adminer',
+      image: 'adminer:latest',
+      port: 8080,
+      icon: Icons.storage_outlined,
+      accent: Color(0xFFBDE0FE),
+    ),
+    _TemplateCardModel(
       label: 'Test (nginx)',
       subtitle: 'Quick Check',
       description: 'Fastest way to confirm Docker, networking, and Serva are all working.',
@@ -130,6 +212,23 @@ class TemplateGalleryScreen extends StatelessWidget {
               color: mutedText,
               height: 1.3,
             ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.tonalIcon(
+                onPressed: () => _openInfiniteTemplates(context),
+                icon: const Icon(Icons.travel_explore_rounded, size: 18),
+                label: const Text('Browse Online'),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: () => _pasteImageOrCommand(context),
+                icon: const Icon(Icons.content_paste_rounded, size: 18),
+                label: const Text('Paste Image'),
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           Container(
@@ -474,4 +573,96 @@ String _subfolderNameForTarget(String target) {
     return 'data';
   }
   return segments.join('-');
+}
+
+Future<void> _openInfiniteTemplates(BuildContext context) async {
+  final uri = Uri.parse('https://hub.docker.com/search');
+  final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+  if (!ok && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Could not open Docker Hub')),
+    );
+  }
+}
+
+Future<void> _pasteImageOrCommand(BuildContext context) async {
+  final bloc = context.read<MainBloc>();
+  final data = await Clipboard.getData(Clipboard.kTextPlain);
+  final text = data?.text ?? '';
+  final image = _extractImageFromPaste(text);
+
+  if (image == null) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Clipboard does not look like an image or docker pull command.'),
+      ),
+    );
+    return;
+  }
+
+  final serviceName = _suggestNameFromImage(image);
+  final mounts = _defaultMountsForTemplate('custom', serviceName);
+
+  bloc.add(
+    MainCreateServiceRequested(
+      name: serviceName,
+      image: image,
+      containerPort: 80,
+      mounts: mounts,
+    ),
+  );
+
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text('Creating $serviceName from clipboard image...'),
+      behavior: SnackBarBehavior.floating,
+    ),
+  );
+}
+
+String? _extractImageFromPaste(String input) {
+  final text = input.trim();
+  if (text.isEmpty) return null;
+
+  final pull = RegExp(r'\bdocker\s+pull\s+([^\s]+)', caseSensitive: false);
+  final match = pull.firstMatch(text);
+  if (match != null) {
+    return match.group(1)?.trim();
+  }
+
+  if (!text.contains(' ') && (text.contains('/') || text.contains(':'))) {
+    return text;
+  }
+
+  return null;
+}
+
+String _suggestNameFromImage(String image) {
+  var base = image.trim();
+  if (base.isEmpty) return 'service-${Random().nextInt(9000) + 1000}';
+
+  base = base.replaceAll(RegExp(r'^docker\s+pull\s+', caseSensitive: false), '').trim();
+
+  if ((base.startsWith('"') && base.endsWith('"')) || (base.startsWith("'") && base.endsWith("'"))) {
+    base = base.substring(1, base.length - 1);
+  }
+
+  final slash = base.lastIndexOf('/');
+  if (slash >= 0 && slash < base.length - 1) {
+    base = base.substring(slash + 1);
+  }
+
+  final colon = base.indexOf(':');
+  if (colon > 0) base = base.substring(0, colon);
+  final at = base.indexOf('@');
+  if (at > 0) base = base.substring(0, at);
+
+  base = base.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-');
+  base = base.replaceAll(RegExp(r'^-+|-+$'), '');
+  if (base.isEmpty) base = 'service';
+
+  final suffix = Random().nextInt(9000) + 1000;
+  return '$base-$suffix';
 }

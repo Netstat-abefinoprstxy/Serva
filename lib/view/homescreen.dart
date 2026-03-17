@@ -12,6 +12,8 @@ import '../bloc/main_bloc.dart';
 import '../bloc/main_event.dart';
 import '../bloc/main_state.dart';
 import 'dashboard_screen.dart';
+import 'service_details_sheet.dart';
+import 'services_overview_screen.dart';
 import 'template_gallery_screen.dart';
 
 const _dockerDesktopStoreUrl = 'https://apps.microsoft.com/detail/xp8cbj40xlbwkx?hl=en-GB&gl=GB';
@@ -57,8 +59,10 @@ class _HomeTabbedShellState extends State<_HomeTabbedShell> {
         return 'Serva Dashboard';
       case 1:
         return 'Quick Launch';
-      default:
+      case 2:
         return 'Serva Services';
+      default:
+        return 'Serva Legacy';
     }
   }
 
@@ -96,6 +100,7 @@ class _HomeTabbedShellState extends State<_HomeTabbedShell> {
             final pages = [
               DashboardScreen(state: state),
               const TemplateGalleryScreen(),
+              ServicesOverviewScreen(state: state),
               _LoadedView(
                 state: state,
                 onCreateService: widget.onCreateService,
@@ -111,11 +116,13 @@ class _HomeTabbedShellState extends State<_HomeTabbedShell> {
           return const SizedBox.shrink();
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: widget.onCreateService,
-        icon: const Icon(Icons.add),
-        label: const Text('Create service'),
-      ),
+      floatingActionButton: _currentIndex == 3
+          ? FloatingActionButton.extended(
+              onPressed: widget.onCreateService,
+              icon: const Icon(Icons.add),
+              label: const Text('Create service'),
+            )
+          : null,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) {
@@ -135,9 +142,14 @@ class _HomeTabbedShellState extends State<_HomeTabbedShell> {
             label: 'Launch',
           ),
           NavigationDestination(
+            icon: Icon(Icons.dns_outlined),
+            selectedIcon: Icon(Icons.dns_rounded),
+            label: 'Services',
+          ),
+          NavigationDestination(
             icon: Icon(Icons.widgets_outlined),
             selectedIcon: Icon(Icons.widgets_rounded),
-            label: 'Services',
+            label: 'Legacy',
           ),
         ],
       ),
@@ -457,7 +469,7 @@ class _ServiceTile extends StatelessWidget {
       leading: CircleAvatar(
         child: Icon(_isRunning ? Icons.play_arrow : Icons.stop),
       ),
-      onTap: () => _showServiceDetailsSheet(context, service),
+      onTap: () => showServiceDetailsSheet(context, service),
       title: Text(service.name),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -518,7 +530,7 @@ class _ServiceTile extends StatelessWidget {
             ),
           IconButton(
             tooltip: 'Details',
-            onPressed: () => _showServiceDetailsSheet(context, service),
+            onPressed: () => showServiceDetailsSheet(context, service),
             icon: const Icon(Icons.tune),
           ),
         ],
