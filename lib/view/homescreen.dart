@@ -20,7 +20,8 @@ class HomeScreen extends StatelessWidget {
         actions: [
           IconButton(
             tooltip: 'Refresh',
-            onPressed: () => context.read<MainBloc>().add(const MainLoadRequested()),
+            onPressed: () =>
+                context.read<MainBloc>().add(const MainLoadRequested()),
             icon: const Icon(Icons.refresh),
           ),
         ],
@@ -38,12 +39,16 @@ class HomeScreen extends StatelessWidget {
           if (state is MainError) {
             return _ErrorView(
               message: state.message,
-              onRetry: () => context.read<MainBloc>().add(const MainLoadRequested()),
+              onRetry: () =>
+                  context.read<MainBloc>().add(const MainLoadRequested()),
             );
           }
 
           if (state is MainLoaded) {
-            return _LoadedView(state: state, onCreateService: () => _showCreateServiceSheet(context));
+            return _LoadedView(
+              state: state,
+              onCreateService: () => _showCreateServiceSheet(context),
+            );
           }
 
           return const SizedBox.shrink();
@@ -79,7 +84,11 @@ class _LoadingView extends StatelessWidget {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        children: [const CircularProgressIndicator(), const SizedBox(height: 12), Text(message ?? 'Working…')],
+        children: [
+          const CircularProgressIndicator(),
+          const SizedBox(height: 12),
+          Text(message ?? 'Working…'),
+        ],
       ),
     );
   }
@@ -103,7 +112,11 @@ class _ErrorView extends StatelessWidget {
             const SizedBox(height: 12),
             Text(message, textAlign: TextAlign.center),
             const SizedBox(height: 16),
-            FilledButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh), label: const Text('Retry')),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
           ],
         ),
       ),
@@ -158,14 +171,19 @@ class _Header extends StatelessWidget {
         children: [
           Icon(
             healthOk ? Icons.check_circle : Icons.warning_amber_rounded,
-            color: healthOk ? theme.colorScheme.primary : theme.colorScheme.error,
+            color: healthOk
+                ? theme.colorScheme.primary
+                : theme.colorScheme.error,
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(healthOk ? 'Daemon connected' : 'Daemon not reachable', style: theme.textTheme.titleSmall),
+                Text(
+                  healthOk ? 'Daemon connected' : 'Daemon not reachable',
+                  style: theme.textTheme.titleSmall,
+                ),
                 if (lastMessage != null && lastMessage!.trim().isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
@@ -200,11 +218,21 @@ class _EmptyServices extends StatelessWidget {
           children: [
             const Icon(Icons.cloud_outlined, size: 48),
             const SizedBox(height: 12),
-            const Text('No services yet', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+            const Text(
+              'No services yet',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 8),
-            const Text('Create your first service to confirm everything is wired up.', textAlign: TextAlign.center),
+            const Text(
+              'Create your first service to confirm everything is wired up.',
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 16),
-            FilledButton.icon(onPressed: onCreate, icon: const Icon(Icons.add), label: const Text('Create service')),
+            FilledButton.icon(
+              onPressed: onCreate,
+              icon: const Icon(Icons.add),
+              label: const Text('Create service'),
+            ),
           ],
         ),
       ),
@@ -234,14 +262,18 @@ class _ServiceTile extends StatelessWidget {
     }
 
     if (uri == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid URL')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Invalid URL')));
       return;
     }
 
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
 
     if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open link')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Could not open link')));
     }
   }
 
@@ -251,7 +283,9 @@ class _ServiceTile extends StatelessWidget {
     final theme = Theme.of(context);
 
     return ListTile(
-      leading: CircleAvatar(child: Icon(_isRunning ? Icons.play_arrow : Icons.stop)),
+      leading: CircleAvatar(
+        child: Icon(_isRunning ? Icons.play_arrow : Icons.stop),
+      ),
       title: Text(service.name),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -292,8 +326,15 @@ class _ServiceTile extends StatelessWidget {
           if (_isRunning)
             IconButton(
               tooltip: _isLanExposed ? 'Disable LAN access' : 'Expose to LAN',
-              onPressed: () => bloc.add(MainExposeLanRequested(id: service.id, enabled: !_isLanExposed)),
-              icon: Icon(Icons.wifi, color: _isLanExposed ? Theme.of(context).colorScheme.primary : null),
+              onPressed: () => bloc.add(
+                MainExposeLanRequested(id: service.id, enabled: !_isLanExposed),
+              ),
+              icon: Icon(
+                Icons.wifi,
+                color: _isLanExposed
+                    ? Theme.of(context).colorScheme.primary
+                    : null,
+              ),
             ),
 
           if (!_isRunning)
@@ -324,14 +365,144 @@ class _CreateServiceSheet extends StatefulWidget {
 }
 
 class _CreateServiceSheetState extends State<_CreateServiceSheet> {
-  static const templates = <({String label, String name, String image, int port})>[
-    (label: 'Test (nginx)', name: 'sovereignd-test', image: 'nginx:alpine', port: 80),
-    (label: 'Vaultwarden', name: 'vaultwarden', image: 'vaultwarden/server:latest', port: 80),
-    (label: 'Jellyfin', name: 'jellyfin', image: 'jellyfin/jellyfin:latest', port: 8096),
-    (label: 'Navidrome', name: 'navidrome', image: 'deluan/navidrome:latest', port: 4533),
-    (label: 'Minecraft', name: 'minecraft', image: 'itzg/minecraft-server:latest', port: 25565),
-    (label: 'Uptime Kuma', name: 'uptime-kuma', image: 'louislam/uptime-kuma:latest', port: 3001),
-  ];
+  static const templates =
+      <({String label, String name, String image, int port})>[
+        // Basic test
+        (
+          label: 'Test (nginx)',
+          name: 'sovereignd-test',
+          image: 'nginx:alpine',
+          port: 80,
+        ),
+
+        // Password Managers (Cloud Alternative: 1Password, Bitwarden SaaS)
+        (
+          label: 'Vaultwarden',
+          name: 'vaultwarden',
+          image: 'vaultwarden/server:latest',
+          port: 80,
+        ),
+
+        // Media (Cloud Alternative: Netflix / Spotify personal media)
+        (
+          label: 'Jellyfin',
+          name: 'jellyfin',
+          image: 'jellyfin/jellyfin:latest',
+          port: 8096,
+        ),
+        (
+          label: 'Navidrome',
+          name: 'navidrome',
+          image: 'deluan/navidrome:latest',
+          port: 4533,
+        ),
+
+        // Game Hosting (Cloud Alternative: Apex / Realms)
+        (
+          label: 'Minecraft',
+          name: 'minecraft',
+          image: 'itzg/minecraft-server:latest',
+          port: 25565,
+        ),
+
+        // Monitoring (Cloud Alternative: Pingdom / UptimeRobot)
+        (
+          label: 'Uptime Kuma',
+          name: 'uptime-kuma',
+          image: 'louislam/uptime-kuma:latest',
+          port: 3001,
+        ),
+
+        // ---- Cloud Replacement Services ----
+
+        // Google Drive / Dropbox Alternative
+        (
+          label: 'Nextcloud (Drive Alternative)',
+          name: 'nextcloud',
+          image: 'nextcloud:latest',
+          port: 80,
+        ),
+
+        // Google Photos Alternative
+        (
+          label: 'Immich (Photos Alternative)',
+          name: 'immich-server',
+          image: 'ghcr.io/immich-app/immich-server:release',
+          port: 2283,
+        ),
+
+        // Notion Alternative
+        (
+          label: 'Outline (Docs/Notion Alternative)',
+          name: 'outline',
+          image: 'outlinewiki/outline:latest',
+          port: 3000,
+        ),
+
+        // Google Analytics Alternative
+        (
+          label: 'Umami (Analytics Alternative)',
+          name: 'umami',
+          image: 'ghcr.io/umami-software/umami:latest',
+          port: 3000,
+        ),
+
+        // Google Search Alternative
+        (
+          label: 'Whoogle (Private Search)',
+          name: 'whoogle',
+          image: 'benbusby/whoogle-search:latest',
+          port: 5000,
+        ),
+
+        // Trello / Jira Alternative
+        (
+          label: 'Focalboard (Project Management)',
+          name: 'focalboard',
+          image: 'mattermost/focalboard:latest',
+          port: 8000,
+        ),
+
+        // Slack / Discord Alternative
+        (
+          label: 'Mattermost (Chat Alternative)',
+          name: 'mattermost',
+          image: 'mattermost/mattermost-team-edition:latest',
+          port: 8065,
+        ),
+
+        // GitHub Alternative
+        (
+          label: 'Gitea (Git Server)',
+          name: 'gitea',
+          image: 'gitea/gitea:latest',
+          port: 3000,
+        ),
+
+        // Google Forms Alternative
+        (
+          label: 'NocoDB (Airtable Alternative)',
+          name: 'nocodb',
+          image: 'nocodb/nocodb:latest',
+          port: 8080,
+        ),
+
+        // Stripe Dashboard-ish internal admin
+        (
+          label: 'Adminer (Database Viewer)',
+          name: 'adminer',
+          image: 'adminer:latest',
+          port: 8080,
+        ),
+
+        // Grafana Cloud Alternative
+        (
+          label: 'Grafana (Metrics Dashboard)',
+          name: 'grafana',
+          image: 'grafana/grafana:latest',
+          port: 3000,
+        ),
+      ];
 
   final _nameCtrl = TextEditingController();
   final _imageCtrl = TextEditingController();
@@ -346,10 +517,13 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
     if (base.isEmpty) return 'service';
 
     // Remove any leading command fragments just in case.
-    base = base.replaceAll(RegExp(r'^docker\s+pull\s+', caseSensitive: false), '').trim();
+    base = base
+        .replaceAll(RegExp(r'^docker\s+pull\s+', caseSensitive: false), '')
+        .trim();
 
     // Trim quotes.
-    if ((base.startsWith('"') && base.endsWith('"')) || (base.startsWith("'") && base.endsWith("'"))) {
+    if ((base.startsWith('"') && base.endsWith('"')) ||
+        (base.startsWith("'") && base.endsWith("'"))) {
       base = base.substring(1, base.length - 1);
     }
 
@@ -399,7 +573,9 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
     final uri = Uri.parse('https://hub.docker.com/search');
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open Docker Hub')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open Docker Hub')),
+      );
     }
   }
 
@@ -411,7 +587,11 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
     if (image == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Clipboard does not look like an image or `docker pull <image>` command.')),
+        const SnackBar(
+          content: Text(
+            'Clipboard does not look like an image or `docker pull <image>` command.',
+          ),
+        ),
       );
       return;
     }
@@ -456,7 +636,9 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
     final port = int.parse(_portCtrl.text.trim());
 
     Navigator.of(context).pop();
-    widget.bloc.add(MainCreateServiceRequested(name: name, image: image, containerPort: port));
+    widget.bloc.add(
+      MainCreateServiceRequested(name: name, image: image, containerPort: port),
+    );
   }
 
   void _createTest() {
@@ -469,14 +651,24 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
     final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
 
     return Padding(
-      padding: EdgeInsets.only(left: 16, right: 16, top: 12, bottom: 16 + bottomPadding),
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 12,
+        bottom: 16 + bottomPadding,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Expanded(child: Text('Create service', style: Theme.of(context).textTheme.titleLarge)),
+              Expanded(
+                child: Text(
+                  'Create service',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
               IconButton(
                 tooltip: 'Docker Hub',
                 onPressed: _openDockerHubSearch,
@@ -497,7 +689,10 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
             value: _selectedTemplate,
             items: [
               for (var i = 0; i < templates.length; i++)
-                DropdownMenuItem<int>(value: i, child: Text(templates[i].label)),
+                DropdownMenuItem<int>(
+                  value: i,
+                  child: Text(templates[i].label),
+                ),
             ],
             onChanged: (v) {
               if (v == null) return;
@@ -517,30 +712,42 @@ class _CreateServiceSheetState extends State<_CreateServiceSheet> {
               children: [
                 TextFormField(
                   controller: _nameCtrl,
-                  decoration: const InputDecoration(labelText: 'Name', hintText: 'e.g. jellyfin-1234'),
+                  decoration: const InputDecoration(
+                    labelText: 'Name',
+                    hintText: 'e.g. jellyfin-1234',
+                  ),
                   textInputAction: TextInputAction.next,
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Name is required' : null,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Name is required'
+                      : null,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _imageCtrl,
                   decoration: const InputDecoration(
                     labelText: 'Image',
-                    hintText: 'e.g. nginx:alpine  (or paste: docker pull mcp/grafana)',
+                    hintText:
+                        'e.g. nginx:alpine  (or paste: docker pull mcp/grafana)',
                   ),
                   textInputAction: TextInputAction.next,
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Image is required' : null,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Image is required'
+                      : null,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _portCtrl,
-                  decoration: const InputDecoration(labelText: 'Container port', hintText: 'e.g. 80'),
+                  decoration: const InputDecoration(
+                    labelText: 'Container port',
+                    hintText: 'e.g. 80',
+                  ),
                   keyboardType: TextInputType.number,
                   validator: (v) {
                     final raw = v?.trim();
                     if (raw == null || raw.isEmpty) return 'Port is required';
                     final p = int.tryParse(raw);
-                    if (p == null || p <= 0 || p > 65535) return 'Port must be 1-65535';
+                    if (p == null || p <= 0 || p > 65535)
+                      return 'Port must be 1-65535';
                     return null;
                   },
                 ),

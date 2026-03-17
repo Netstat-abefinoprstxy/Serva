@@ -39,6 +39,7 @@ dependencies:
   json_annotation: ^4.9.0
   flutter_bloc: ^9.1.1
   url_launcher: ^6.3.2
+  msix: ^3.16.13
 
 dev_dependencies:
   flutter_test:
