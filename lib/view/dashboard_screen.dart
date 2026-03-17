@@ -1859,15 +1859,15 @@ class _MissionPanel extends StatelessWidget {
           Text(
             'Mission profile',
             style: theme.textTheme.titleLarge?.copyWith(
-              fontSize: (theme.textTheme.titleLarge?.fontSize ?? 24) * scale,
+              fontSize: (theme.textTheme.titleLarge?.fontSize ?? 26) * scale,
               fontWeight: FontWeight.w700,
             ),
           ),
           SizedBox(height: 6 * scale),
           Center(
             child: SizedBox(
-              width: 138 * scale,
-              height: 138 * scale,
+              width: 156 * scale,
+              height: 156 * scale,
               child: CustomPaint(
                 painter: _GaugePainter(value: readinessScore / 100),
                 child: Center(
@@ -1878,7 +1878,7 @@ class _MissionPanel extends StatelessWidget {
                         '$readinessScore%',
                         style: theme.textTheme.headlineMedium?.copyWith(
                           fontSize:
-                              (theme.textTheme.headlineMedium?.fontSize ?? 36) *
+                              (theme.textTheme.headlineMedium?.fontSize ?? 40) *
                               scale,
                           fontWeight: FontWeight.w800,
                         ),
@@ -1888,7 +1888,7 @@ class _MissionPanel extends StatelessWidget {
                         'Readiness',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           fontSize:
-                              (theme.textTheme.bodyMedium?.fontSize ?? 18) * scale,
+                              (theme.textTheme.bodyMedium?.fontSize ?? 20) * scale,
                           color: theme.colorScheme.onSurface.withValues(
                             alpha: 0.72,
                           ),
@@ -1982,14 +1982,15 @@ class _ChecklistItem extends StatelessWidget {
               Text(
                 title,
                 style: theme.textTheme.titleSmall?.copyWith(
-                  fontSize: (theme.textTheme.titleMedium?.fontSize ?? 19) * scale,
+                  fontSize: (theme.textTheme.titleLarge?.fontSize ?? 22) * scale,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               SizedBox(height: 2 * scale),
               Text(
                 subtitle,
                 style: theme.textTheme.bodySmall?.copyWith(
-                  fontSize: (theme.textTheme.bodyMedium?.fontSize ?? 18) * scale,
+                  fontSize: (theme.textTheme.bodyLarge?.fontSize ?? 19) * scale,
                   fontWeight: FontWeight.w500,
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
                 ),
