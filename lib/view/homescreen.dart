@@ -52,6 +52,7 @@ class _HomeTabbedShell extends StatefulWidget {
 
 class _HomeTabbedShellState extends State<_HomeTabbedShell> {
   int _currentIndex = 0;
+  bool _legacyModeEnabled = false;
 
   String get _title {
     switch (_currentIndex) {
@@ -61,8 +62,10 @@ class _HomeTabbedShellState extends State<_HomeTabbedShell> {
         return 'Quick Launch';
       case 2:
         return 'Serva Services';
-      default:
+      case 3:
         return 'Serva Legacy';
+      default:
+        return 'Serva';
     }
   }
 
@@ -81,6 +84,17 @@ class _HomeTabbedShellState extends State<_HomeTabbedShell> {
       ),
       body: BlocBuilder<MainBloc, MainState>(
         builder: (context, state) {
+          MainLoaded? fallbackLoadedState;
+          if (state is MainError &&
+              (_looksLikeDockerUnavailable(state.message) || _looksLikeVirtualizationIssue(state.message))) {
+            fallbackLoadedState = MainLoaded(
+              services: const [],
+              definitions: const [],
+              healthOk: false,
+              lastMessage: state.message,
+            );
+          }
+
           if (state is MainInitial) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -89,22 +103,35 @@ class _HomeTabbedShellState extends State<_HomeTabbedShell> {
             return const _LoadingView(message: 'Loading your control plane...');
           }
 
-          if (state is MainError) {
+          if (state is MainError && fallbackLoadedState == null) {
             return _ErrorView(
               message: state.message,
               onRetry: () => context.read<MainBloc>().add(const MainLoadRequested()),
             );
           }
 
-          if (state is MainLoaded) {
+          final loadedState = state is MainLoaded ? state : fallbackLoadedState;
+          if (loadedState != null) {
             final pages = [
-              DashboardScreen(state: state),
+              DashboardScreen(state: loadedState),
               const TemplateGalleryScreen(),
-              ServicesOverviewScreen(state: state),
-              _LoadedView(
-                state: state,
-                onCreateService: widget.onCreateService,
+              ServicesOverviewScreen(
+                state: loadedState,
+                legacyModeEnabled: _legacyModeEnabled,
+                onLegacyModeChanged: (enabled) {
+                  setState(() {
+                    _legacyModeEnabled = enabled;
+                    if (!enabled && _currentIndex > 2) {
+                      _currentIndex = 2;
+                    }
+                  });
+                },
               ),
+              if (_legacyModeEnabled)
+                _LoadedView(
+                  state: loadedState,
+                  onCreateService: widget.onCreateService,
+                ),
             ];
 
             return IndexedStack(
@@ -116,7 +143,7 @@ class _HomeTabbedShellState extends State<_HomeTabbedShell> {
           return const SizedBox.shrink();
         },
       ),
-      floatingActionButton: _currentIndex == 3
+      floatingActionButton: _legacyModeEnabled && _currentIndex == 3
           ? FloatingActionButton.extended(
               onPressed: widget.onCreateService,
               icon: const Icon(Icons.add),
@@ -130,27 +157,28 @@ class _HomeTabbedShellState extends State<_HomeTabbedShell> {
             _currentIndex = index;
           });
         },
-        destinations: const [
-          NavigationDestination(
+        destinations: [
+          const NavigationDestination(
             icon: Icon(Icons.space_dashboard_rounded),
             selectedIcon: Icon(Icons.space_dashboard),
             label: 'Dashboard',
           ),
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.grid_view_rounded),
             selectedIcon: Icon(Icons.grid_view),
             label: 'Launch',
           ),
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.dns_outlined),
             selectedIcon: Icon(Icons.dns_rounded),
             label: 'Services',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.widgets_outlined),
-            selectedIcon: Icon(Icons.widgets_rounded),
-            label: 'Legacy',
-          ),
+          if (_legacyModeEnabled)
+            const NavigationDestination(
+              icon: Icon(Icons.widgets_outlined),
+              selectedIcon: Icon(Icons.widgets_rounded),
+              label: 'Legacy',
+            ),
         ],
       ),
     );

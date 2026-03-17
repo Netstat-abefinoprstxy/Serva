@@ -13,6 +13,12 @@ import 'package:serva/bloc/main_state.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'service_details_sheet.dart';
 
+const _dockerDesktopStoreUrl =
+    'https://apps.microsoft.com/detail/xp8cbj40xlbwkx?hl=en-GB&gl=GB';
+const _virtualizationHelpUrl =
+    'https://support.microsoft.com/en-us/windows/enable-virtualization-on-windows-c5578302-6e43-4b4b-a449-8ced115f58e1';
+const _forceDashboardVirtualizationPreview = false;
+
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key, required this.state});
 
@@ -92,7 +98,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }),
     );
 
-    final usableStats = serviceStats.whereType<MapEntry<GoService, GoStatsResponse>>().toList();
+    final usableStats = serviceStats
+        .whereType<MapEntry<GoService, GoStatsResponse>>()
+        .toList();
     final hostMetrics = await _loadHostMetrics();
     final storageMetrics = await _loadServaStorageMetrics(definitions);
 
@@ -185,9 +193,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     try {
       final userProfile = Platform.environment['USERPROFILE'] ?? '';
-      final documentsPath = userProfile.isNotEmpty ? '$userProfile\\Documents\\Serva' : 'C:\\';
-      final drive = documentsPath.length >= 2 ? documentsPath.substring(0, 2) : 'C:';
-      final command = r'''
+      final documentsPath = userProfile.isNotEmpty
+          ? '$userProfile\\Documents\\Serva'
+          : 'C:\\';
+      final drive = documentsPath.length >= 2
+          ? documentsPath.substring(0, 2)
+          : 'C:';
+      final command =
+          r'''
 $cpu = (Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average
 $os = Get-CimInstance Win32_OperatingSystem
 $totalMemory = [double]$os.TotalVisibleMemorySize
@@ -209,12 +222,14 @@ $usedStorage = if ($driveSize -gt 0) { $driveSize - $freeSpace } else { 0 }
   storageUsed = [math]::Round($usedStorage, 0)
   storageTotal = [math]::Round($driveSize, 0)
 } | ConvertTo-Json -Compress
-'''.replaceAll('__DRIVE__', drive);
+'''
+              .replaceAll('__DRIVE__', drive);
 
-      final result = await Process.run(
-        'powershell',
-        ['-NoProfile', '-Command', command],
-      );
+      final result = await Process.run('powershell', [
+        '-NoProfile',
+        '-Command',
+        command,
+      ]);
 
       if (result.exitCode != 0) {
         return const _HostMetrics(
@@ -276,7 +291,9 @@ $usedStorage = if ($driveSize -gt 0) { $driveSize - $freeSpace } else { 0 }
     }
   }
 
-  Future<_ServaStorageMetrics> _loadServaStorageMetrics(List<GoServiceDefinition> definitions) async {
+  Future<_ServaStorageMetrics> _loadServaStorageMetrics(
+    List<GoServiceDefinition> definitions,
+  ) async {
     final basePath = _servaManagedBasePath();
     final serviceRoots = <String, String>{};
 
@@ -291,8 +308,12 @@ $usedStorage = if ($driveSize -gt 0) { $driveSize - $freeSpace } else { 0 }
       ..writeln("\$base = '${_psEscape(basePath)}'")
       ..writeln("\$result = [ordered]@{}")
       ..writeln("if (Test-Path -LiteralPath \$base) {")
-      ..writeln("  \$total = (Get-ChildItem -LiteralPath \$base -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum")
-      ..writeln("  \$result.total = if (\$null -eq \$total) { 0 } else { [double]\$total }")
+      ..writeln(
+        "  \$total = (Get-ChildItem -LiteralPath \$base -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum",
+      )
+      ..writeln(
+        "  \$result.total = if (\$null -eq \$total) { 0 } else { [double]\$total }",
+      )
       ..writeln("} else {")
       ..writeln("  \$result.total = 0")
       ..writeln("}")
@@ -302,8 +323,12 @@ $usedStorage = if ($driveSize -gt 0) { $driveSize - $freeSpace } else { 0 }
       command
         ..writeln("\$servicePath = '${_psEscape(path)}'")
         ..writeln("if (Test-Path -LiteralPath \$servicePath) {")
-        ..writeln("  \$sum = (Get-ChildItem -LiteralPath \$servicePath -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum")
-        ..writeln("  \$services['${_psEscape(name)}'] = if (\$null -eq \$sum) { 0 } else { [double]\$sum }")
+        ..writeln(
+          "  \$sum = (Get-ChildItem -LiteralPath \$servicePath -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum",
+        )
+        ..writeln(
+          "  \$services['${_psEscape(name)}'] = if (\$null -eq \$sum) { 0 } else { [double]\$sum }",
+        )
         ..writeln("} else {")
         ..writeln("  \$services['${_psEscape(name)}'] = 0")
         ..writeln("}");
@@ -314,10 +339,11 @@ $usedStorage = if ($driveSize -gt 0) { $driveSize - $freeSpace } else { 0 }
       ..writeln("\$result | ConvertTo-Json -Compress");
 
     try {
-      final result = await Process.run(
-        'powershell',
-        ['-NoProfile', '-Command', command.toString()],
-      );
+      final result = await Process.run('powershell', [
+        '-NoProfile',
+        '-Command',
+        command.toString(),
+      ]);
 
       if (result.exitCode != 0) {
         return const _ServaStorageMetrics(totalBytes: 0, serviceBytes: {});
@@ -353,26 +379,33 @@ $usedStorage = if ($driveSize -gt 0) { $driveSize - $freeSpace } else { 0 }
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final width = MediaQuery.of(context).size.width;
+    final uiScale = _dashboardUiScale(width);
     final services = widget.state.services;
     final definitions = widget.state.definitions;
-    final runningServices = services.where((service) => service.state.toLowerCase() == 'running').length;
+    final lastMessage = widget.state.lastMessage;
+    final runningServices = services
+        .where((service) => service.state.toLowerCase() == 'running')
+        .length;
     final lanServices = services.where((service) => service.lanEnabled).length;
-    final savedOnlyDefinitions = definitions.where((definition) => !definition.isDeployed).length;
+    final savedOnlyDefinitions = definitions
+        .where((definition) => !definition.isDeployed)
+        .length;
+    final showDashboardSupportBanner =
+        _forceDashboardVirtualizationPreview ||
+        _looksLikeDockerUnavailable(lastMessage) ||
+        _looksLikeVirtualizationIssue(lastMessage);
 
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF08111F),
-            Color(0xFF101B31),
-            Color(0xFF171E2D),
-          ],
+          colors: [Color(0xFF08111F), Color(0xFF101B31), Color(0xFF171E2D)],
         ),
       ),
       child: ListView(
-        padding: const EdgeInsets.all(8),
+        padding: EdgeInsets.all(8 * uiScale),
         children: [
           Text(
             'System Command',
@@ -388,32 +421,55 @@ $usedStorage = if ($driveSize -gt 0) { $driveSize - $freeSpace } else { 0 }
               color: theme.colorScheme.onSurface.withValues(alpha: 0.78),
             ),
           ),
-          const SizedBox(height: 8),
+          if (showDashboardSupportBanner) ...[
+            SizedBox(height: 8 * uiScale),
+            _DashboardSupportBanner(message: lastMessage ?? '', scale: uiScale),
+          ],
+          SizedBox(height: 8 * uiScale),
           _HeroPanel(
             healthOk: widget.state.healthOk,
             runningServices: runningServices,
             totalServices: services.length,
             savedDefinitions: savedOnlyDefinitions,
             lanServices: lanServices,
-            throughputSeries: _buildSeriesFromSeed(services.length * 17 + 11, 18, 18),
+            throughputSeries: _buildSeriesFromSeed(
+              services.length * 17 + 11,
+              18,
+              18,
+            ),
+            scale: uiScale,
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8 * uiScale),
           FutureBuilder<_DashboardMetrics>(
             future: _metricsFuture,
             builder: (context, snapshot) {
               final metrics = snapshot.data;
-              final containerCpu = _boundedValue((metrics?.containerCpuPercent ?? 0).round(), 0, 999);
-              final networkMegabytes = _bytesToMegabytes(
-                (metrics?.containerNetworkRxBytes ?? 0) + (metrics?.containerNetworkTxBytes ?? 0),
+              final containerCpu = _boundedValue(
+                (metrics?.containerCpuPercent ?? 0).round(),
+                0,
+                999,
               );
-              final containerMemoryMegabytes = _bytesToMegabytes(metrics?.containerMemoryBytes ?? 0);
+              final networkMegabytes = _bytesToMegabytes(
+                (metrics?.containerNetworkRxBytes ?? 0) +
+                    (metrics?.containerNetworkTxBytes ?? 0),
+              );
+              final containerMemoryMegabytes = _bytesToMegabytes(
+                metrics?.containerMemoryBytes ?? 0,
+              );
               final liveStatsCount = metrics?.liveStatsCount ?? 0;
-              final cpuSeries = _cpuHistory.isEmpty ? (metrics?.cpuSeries ?? const <double>[]) : _cpuHistory;
-              final memorySeries = _memoryHistory.isEmpty ? (metrics?.memorySeries ?? const <double>[]) : _memoryHistory;
-              final networkSeries = _networkHistory.isEmpty ? (metrics?.networkSeries ?? const <double>[]) : _networkHistory;
-              final storageSeries = _storageHistory.isEmpty ? (metrics?.storageSeries ?? const <double>[]) : _storageHistory;
+              final cpuSeries = _cpuHistory.isEmpty
+                  ? (metrics?.cpuSeries ?? const <double>[])
+                  : _cpuHistory;
+              final memorySeries = _memoryHistory.isEmpty
+                  ? (metrics?.memorySeries ?? const <double>[])
+                  : _memoryHistory;
+              final networkSeries = _networkHistory.isEmpty
+                  ? (metrics?.networkSeries ?? const <double>[])
+                  : _networkHistory;
+              final storageSeries = _storageHistory.isEmpty
+                  ? (metrics?.storageSeries ?? const <double>[])
+                  : _storageHistory;
 
-              final width = MediaQuery.of(context).size.width;
               final crossAxisCount = width >= 1400
                   ? 4
                   : width >= 1000
@@ -422,15 +478,16 @@ $usedStorage = if ($driveSize -gt 0) { $driveSize - $freeSpace } else { 0 }
 
               return GridView.count(
                 crossAxisCount: crossAxisCount,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
+                crossAxisSpacing: 8 * uiScale,
+                mainAxisSpacing: 8 * uiScale,
                 shrinkWrap: true,
-                childAspectRatio: crossAxisCount >= 4 ? 1.72 : 1.95,
+                childAspectRatio: crossAxisCount >= 4 ? 1.95 : 2.15,
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
                   _StatCard(
                     label: 'Serva CPU',
-                    value: '${metrics?.containerCpuPercent.toStringAsFixed(1) ?? '0.0'}%',
+                    value:
+                        '${metrics?.containerCpuPercent.toStringAsFixed(1) ?? '0.0'}%',
                     caption: liveStatsCount == 0
                         ? 'No live container CPU data yet'
                         : 'Aggregate CPU across active services',
@@ -438,7 +495,9 @@ $usedStorage = if ($driveSize -gt 0) { $driveSize - $freeSpace } else { 0 }
                     icon: Icons.memory_rounded,
                     series: cpuSeries,
                     graphTick: _graphTick,
-                    footer: 'Host load context: ${metrics?.hostCpuPercent.toStringAsFixed(1) ?? '0.0'}%',
+                    scale: uiScale,
+                    footer:
+                        'Host load context: ${metrics?.hostCpuPercent.toStringAsFixed(1) ?? '0.0'}%',
                   ),
                   _StatCard(
                     label: 'Serva Memory',
@@ -450,12 +509,16 @@ $usedStorage = if ($driveSize -gt 0) { $driveSize - $freeSpace } else { 0 }
                     icon: Icons.stacked_line_chart_rounded,
                     series: memorySeries,
                     graphTick: _graphTick,
+                    scale: uiScale,
                     footer:
                         'Host memory context: ${_formatBytes(metrics?.hostMemoryUsedBytes ?? 0)} / ${_formatBytes(metrics?.hostMemoryTotalBytes ?? 0)}',
                   ),
                   _StatCard(
                     label: 'Serva Network',
-                    value: _formatBytes((metrics?.containerNetworkRxBytes ?? 0) + (metrics?.containerNetworkTxBytes ?? 0)),
+                    value: _formatBytes(
+                      (metrics?.containerNetworkRxBytes ?? 0) +
+                          (metrics?.containerNetworkTxBytes ?? 0),
+                    ),
                     caption: liveStatsCount == 0
                         ? 'No live Docker stats yet'
                         : 'Live network usage across active services',
@@ -463,6 +526,7 @@ $usedStorage = if ($driveSize -gt 0) { $driveSize - $freeSpace } else { 0 }
                     icon: Icons.wifi_tethering_rounded,
                     series: networkSeries,
                     graphTick: _graphTick,
+                    scale: uiScale,
                     footer: liveStatsCount == 0
                         ? 'Waiting for container stats'
                         : '${_formatBytes(metrics?.containerNetworkRxBytes ?? 0)} rx / ${_formatBytes(metrics?.containerNetworkTxBytes ?? 0)} tx  |  ${_formatBytes(_megabytesToBytes(_latestNetworkSample))}/s',
@@ -475,6 +539,7 @@ $usedStorage = if ($driveSize -gt 0) { $driveSize - $freeSpace } else { 0 }
                     icon: Icons.storage_rounded,
                     series: storageSeries,
                     graphTick: _graphTick,
+                    scale: uiScale,
                     footer:
                         'Drive usage: ${_formatBytes(metrics?.hostStorageUsedBytes ?? 0)} / ${_formatBytes(metrics?.hostStorageTotalBytes ?? 0)}',
                   ),
@@ -489,13 +554,18 @@ $usedStorage = if ($driveSize -gt 0) { $driveSize - $freeSpace } else { 0 }
                 return Column(
                   children: [
                     _ActivityPanel(
-                      services: services.map((service) => _ServicePulse.fromService(service)).toList(),
+                      services: services
+                          .map((service) => _ServicePulse.fromService(service))
+                          .toList(),
+                      scale: uiScale,
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8 * uiScale),
                     _MissionPanel(
                       healthOk: widget.state.healthOk,
+                      lastMessage: lastMessage,
                       savedDefinitions: savedOnlyDefinitions,
                       services: services.length,
+                      scale: uiScale,
                     ),
                   ],
                 );
@@ -507,16 +577,21 @@ $usedStorage = if ($driveSize -gt 0) { $driveSize - $freeSpace } else { 0 }
                   Expanded(
                     flex: 3,
                     child: _ActivityPanel(
-                      services: services.map((service) => _ServicePulse.fromService(service)).toList(),
+                      services: services
+                          .map((service) => _ServicePulse.fromService(service))
+                          .toList(),
+                      scale: uiScale,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  SizedBox(width: 8 * uiScale),
                   Expanded(
                     flex: 2,
                     child: _MissionPanel(
                       healthOk: widget.state.healthOk,
+                      lastMessage: lastMessage,
                       savedDefinitions: savedOnlyDefinitions,
                       services: services.length,
+                      scale: uiScale,
                     ),
                   ),
                 ],
@@ -532,7 +607,11 @@ $usedStorage = if ($driveSize -gt 0) { $driveSize - $freeSpace } else { 0 }
     return value.clamp(min, max);
   }
 
-  List<double> _pushHistory(List<double> target, double sample, {int maxPoints = 36}) {
+  List<double> _pushHistory(
+    List<double> target,
+    double sample, {
+    int maxPoints = 36,
+  }) {
     target.add(sample);
     if (target.length > maxPoints) {
       target.removeAt(0);
@@ -540,16 +619,17 @@ $usedStorage = if ($driveSize -gt 0) { $driveSize - $freeSpace } else { 0 }
     return List<double>.from(target);
   }
 
-  static List<double> _buildSeriesFromSeed(int seed, int points, int amplitude) {
+  static List<double> _buildSeriesFromSeed(
+    int seed,
+    int points,
+    int amplitude,
+  ) {
     final random = Random(seed);
-    return List<double>.generate(
-      points,
-      (index) {
-        final base = 42 + sin((index + seed) / 2.2) * amplitude;
-        final noise = random.nextDouble() * 12 - 6;
-        return (base + noise).clamp(8, 96).toDouble();
-      },
-    );
+    return List<double>.generate(points, (index) {
+      final base = 42 + sin((index + seed) / 2.2) * amplitude;
+      final noise = random.nextDouble() * 12 - 6;
+      return (base + noise).clamp(8, 96).toDouble();
+    });
   }
 }
 
@@ -580,7 +660,9 @@ class _ServiceControlPanel extends StatelessWidget {
         children: [
           Text(
             'Active services',
-            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 1),
           Text(
@@ -597,7 +679,9 @@ class _ServiceControlPanel extends StatelessWidget {
                 color: Colors.white.withValues(alpha: 0.03),
                 borderRadius: BorderRadius.circular(18),
               ),
-              child: const Text('No running or saved containers are active yet. Launch one from the Launch tab.'),
+              child: const Text(
+                'No running or saved containers are active yet. Launch one from the Launch tab.',
+              ),
             )
           else
             LayoutBuilder(
@@ -621,7 +705,13 @@ class _ServiceControlPanel extends StatelessWidget {
                     crossAxisCount: crossAxisCount,
                     crossAxisSpacing: 8,
                     mainAxisSpacing: 8,
-                    childAspectRatio: crossAxisCount == 1 ? 3.4 : crossAxisCount >= 4 ? 1.56 : crossAxisCount == 3 ? 1.72 : 2.3,
+                    childAspectRatio: crossAxisCount == 1
+                        ? 3.4
+                        : crossAxisCount >= 4
+                        ? 1.56
+                        : crossAxisCount == 3
+                        ? 1.72
+                        : 2.3,
                   ),
                   itemBuilder: (context, index) {
                     final service = services[index];
@@ -661,7 +751,9 @@ class _InactiveServicePanel extends StatelessWidget {
         children: [
           Text(
             'Inactive services',
-            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 2),
           Text(
@@ -725,7 +817,9 @@ class _ServiceCommandTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final bloc = context.read<MainBloc>();
-    final accent = _isRunning ? const Color(0xFF80ED99) : const Color(0xFFFFC857);
+    final accent = _isRunning
+        ? const Color(0xFF80ED99)
+        : const Color(0xFFFFC857);
 
     return Container(
       padding: const EdgeInsets.all(10),
@@ -735,7 +829,10 @@ class _ServiceCommandTile extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: [
             const Color(0xFF17233C),
-            Color.alphaBlend(accent.withValues(alpha: 0.12), const Color(0xFF101A2D)),
+            Color.alphaBlend(
+              accent.withValues(alpha: 0.12),
+              const Color(0xFF101A2D),
+            ),
           ],
         ),
         borderRadius: BorderRadius.circular(22),
@@ -754,7 +851,9 @@ class _ServiceCommandTile extends StatelessWidget {
                       service.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -762,7 +861,9 @@ class _ServiceCommandTile extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.7,
+                        ),
                       ),
                     ),
                   ],
@@ -770,7 +871,10 @@ class _ServiceCommandTile extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: accent.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(999),
@@ -793,7 +897,9 @@ class _ServiceCommandTile extends StatelessWidget {
             children: [
               _ActionChip(
                 label: service.localUrl.trim().isNotEmpty ? 'Open' : 'Manage',
-                icon: service.localUrl.trim().isNotEmpty ? Icons.open_in_new_rounded : Icons.tune_rounded,
+                icon: service.localUrl.trim().isNotEmpty
+                    ? Icons.open_in_new_rounded
+                    : Icons.tune_rounded,
                 onTap: () {
                   if (service.localUrl.trim().isNotEmpty) {
                     _openUrl(context, service.localUrl);
@@ -807,7 +913,9 @@ class _ServiceCommandTile extends StatelessWidget {
               ),
               _ActionChip(
                 label: _isRunning ? 'Pause' : 'Start',
-                icon: _isRunning ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded,
+                icon: _isRunning
+                    ? Icons.pause_circle_outline_rounded
+                    : Icons.play_circle_outline_rounded,
                 onTap: () {
                   if (_isRunning) {
                     bloc.add(MainStopRequested(id: service.id));
@@ -824,7 +932,12 @@ class _ServiceCommandTile extends StatelessWidget {
               _ActionChip(
                 label: service.lanEnabled ? 'LAN On' : 'LAN Off',
                 icon: Icons.wifi_tethering_rounded,
-                onTap: () => bloc.add(MainExposeLanRequested(id: service.id, enabled: !service.lanEnabled)),
+                onTap: () => bloc.add(
+                  MainExposeLanRequested(
+                    id: service.id,
+                    enabled: !service.lanEnabled,
+                  ),
+                ),
               ),
               _ActionChip(
                 label: 'Remove',
@@ -866,7 +979,10 @@ class _ServiceCommandTile extends StatelessWidget {
           ],
           Row(
             children: [
-              _ServiceMeta(label: 'Port', value: service.port > 0 ? '${service.port}' : 'none'),
+              _ServiceMeta(
+                label: 'Port',
+                value: service.port > 0 ? '${service.port}' : 'none',
+              ),
               const SizedBox(width: 16),
               Expanded(
                 child: _ServiceMeta(label: 'Status', value: service.status),
@@ -883,7 +999,9 @@ class _ServiceCommandTile extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remove service?'),
-        content: Text('This will remove "${service.name}" from the current deployment.'),
+        content: Text(
+          'This will remove "${service.name}" from the current deployment.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -930,7 +1048,9 @@ class _InactiveServiceTile extends StatelessWidget {
                   definition.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
               Container(
@@ -967,7 +1087,8 @@ class _InactiveServiceTile extends StatelessWidget {
                   label: 'Restore',
                   icon: Icons.restore_rounded,
                   color: const Color(0xFF80ED99),
-                  onTap: () => bloc.add(MainRecreateRequested(id: definition.id)),
+                  onTap: () =>
+                      bloc.add(MainRecreateRequested(id: definition.id)),
                 ),
               ),
               const SizedBox(width: 6),
@@ -1027,14 +1148,16 @@ class _ActionChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = destructive ? const Color(0xFFFF7B72) : theme.colorScheme.primary;
+    final color = destructive
+        ? const Color(0xFFFF7B72)
+        : theme.colorScheme.primary;
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(999),
-      child: Ink(
+        child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.12),
@@ -1139,7 +1262,9 @@ class _ServiceMeta extends StatelessWidget {
           value,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ],
     );
@@ -1154,6 +1279,7 @@ class _HeroPanel extends StatelessWidget {
     required this.savedDefinitions,
     required this.lanServices,
     required this.throughputSeries,
+    required this.scale,
   });
 
   final bool healthOk;
@@ -1162,22 +1288,23 @@ class _HeroPanel extends StatelessWidget {
   final int savedDefinitions;
   final int lanServices;
   final List<double> throughputSeries;
+  final double scale;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.symmetric(
+        horizontal: 10 * scale,
+        vertical: 8 * scale,
+      ),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(20 * scale),
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF101D36),
-            Color(0xFF0D1527),
-          ],
+          colors: [Color(0xFF101D36), Color(0xFF0D1527)],
         ),
         border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
       ),
@@ -1187,38 +1314,46 @@ class _HeroPanel extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 14,
-                height: 14,
+                width: 10 * scale,
+                height: 10 * scale,
                 decoration: BoxDecoration(
-                  color: healthOk ? const Color(0xFF80ED99) : const Color(0xFFFF7B72),
+                  color: healthOk
+                      ? const Color(0xFF80ED99)
+                      : const Color(0xFFFF7B72),
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: (healthOk ? const Color(0xFF80ED99) : const Color(0xFFFF7B72))
-                          .withValues(alpha: 0.45),
-                      blurRadius: 18,
+                      color:
+                          (healthOk
+                                  ? const Color(0xFF80ED99)
+                                  : const Color(0xFFFF7B72))
+                              .withValues(alpha: 0.45),
+                      blurRadius: 10,
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 10),
+              SizedBox(width: 8 * scale),
               Text(
                 healthOk ? 'System stable' : 'Attention needed',
-                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontSize: (theme.textTheme.titleMedium?.fontSize ?? 16) * scale,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: 2 * scale),
           Text(
             healthOk
-                ? 'Your local platform is online and ready to orchestrate services.'
-                : 'The control layer is having trouble reaching Docker or the backend.',
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
-              height: 1.4,
+                ? 'Backend reachable and ready.'
+                : 'Docker or the backend needs attention.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontSize: (theme.textTheme.bodySmall?.fontSize ?? 12) * scale,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.74),
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 6 * scale),
           LayoutBuilder(
             builder: (context, constraints) {
               final compact = constraints.maxWidth < 850;
@@ -1229,24 +1364,28 @@ class _HeroPanel extends StatelessWidget {
                       label: 'Running',
                       value: '$runningServices',
                       accent: const Color(0xFF4CC9F0),
+                      scale: scale,
                     ),
-                    const SizedBox(height: 4),
+                    SizedBox(height: 3 * scale),
                     _MiniStatStrip(
                       label: 'Tracked',
                       value: '$totalServices',
                       accent: const Color(0xFF80ED99),
+                      scale: scale,
                     ),
-                    const SizedBox(height: 4),
+                    SizedBox(height: 3 * scale),
                     _MiniStatStrip(
                       label: 'Saved',
                       value: '$savedDefinitions',
                       accent: const Color(0xFFFFC857),
+                      scale: scale,
                     ),
-                    const SizedBox(height: 4),
+                    SizedBox(height: 3 * scale),
                     _MiniStatStrip(
                       label: 'LAN',
                       value: '$lanServices',
                       accent: const Color(0xFFFF7B72),
+                      scale: scale,
                     ),
                   ],
                 );
@@ -1259,45 +1398,39 @@ class _HeroPanel extends StatelessWidget {
                       label: 'Running',
                       value: '$runningServices',
                       accent: const Color(0xFF4CC9F0),
+                      scale: scale,
                     ),
                   ),
-                  const SizedBox(width: 4),
+                  SizedBox(width: 3 * scale),
                   Expanded(
                     child: _MiniStatStrip(
                       label: 'Tracked',
                       value: '$totalServices',
                       accent: const Color(0xFF80ED99),
+                      scale: scale,
                     ),
                   ),
-                  const SizedBox(width: 4),
+                  SizedBox(width: 3 * scale),
                   Expanded(
                     child: _MiniStatStrip(
                       label: 'Saved',
                       value: '$savedDefinitions',
                       accent: const Color(0xFFFFC857),
+                      scale: scale,
                     ),
                   ),
-                  const SizedBox(width: 4),
+                  SizedBox(width: 3 * scale),
                   Expanded(
                     child: _MiniStatStrip(
                       label: 'LAN',
                       value: '$lanServices',
                       accent: const Color(0xFFFF7B72),
+                      scale: scale,
                     ),
                   ),
                 ],
               );
             },
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 68,
-            child: CustomPaint(
-              painter: _AreaChartPainter(
-                values: throughputSeries,
-                color: const Color(0xFF4CC9F0),
-              ),
-            ),
           ),
         ],
       ),
@@ -1314,6 +1447,7 @@ class _StatCard extends StatelessWidget {
     required this.icon,
     required this.series,
     required this.graphTick,
+    required this.scale,
     this.footer,
   });
 
@@ -1324,6 +1458,7 @@ class _StatCard extends StatelessWidget {
   final IconData icon;
   final List<double> series;
   final int graphTick;
+  final double scale;
   final String? footer;
 
   @override
@@ -1331,10 +1466,10 @@ class _StatCard extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: EdgeInsets.all(8 * scale),
       decoration: BoxDecoration(
         color: const Color(0xFF0F1728).withValues(alpha: 0.88),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(20 * scale),
         border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
       ),
       child: Column(
@@ -1343,10 +1478,10 @@ class _StatCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: EdgeInsets.all(8 * scale),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(14 * scale),
                 ),
                 child: Icon(icon, color: color),
               ),
@@ -1354,6 +1489,7 @@ class _StatCard extends StatelessWidget {
               Text(
                 label.toUpperCase(),
                 style: theme.textTheme.labelMedium?.copyWith(
+                  fontSize: (theme.textTheme.labelMedium?.fontSize ?? 11) * scale,
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.68),
                   letterSpacing: 1.1,
                 ),
@@ -1362,7 +1498,7 @@ class _StatCard extends StatelessWidget {
           ),
           const Spacer(),
           SizedBox(
-            height: 104,
+            height: 86 * scale,
             width: double.infinity,
             child: CustomPaint(
               painter: _HistoryBarsPainter(
@@ -1372,31 +1508,35 @@ class _StatCard extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: 8 * scale),
           Text(
             value,
             style: theme.textTheme.headlineMedium?.copyWith(
+              fontSize:
+                  (theme.textTheme.headlineMedium?.fontSize ?? 28) * scale,
               fontWeight: FontWeight.w800,
               color: Colors.white,
             ),
           ),
-          const SizedBox(height: 2),
+          SizedBox(height: 2 * scale),
           Text(
             caption,
             style: theme.textTheme.bodySmall?.copyWith(
+              fontSize: (theme.textTheme.bodySmall?.fontSize ?? 12) * scale,
               color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
             ),
           ),
           if (footer != null) ...[
-            const SizedBox(height: 2),
+            SizedBox(height: 2 * scale),
             Text(
               footer!,
               style: theme.textTheme.bodySmall?.copyWith(
+                fontSize: (theme.textTheme.bodySmall?.fontSize ?? 12) * scale,
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.56),
               ),
             ),
           ],
-          const SizedBox(height: 6),
+          SizedBox(height: 4 * scale),
         ],
       ),
     );
@@ -1404,19 +1544,20 @@ class _StatCard extends StatelessWidget {
 }
 
 class _ActivityPanel extends StatelessWidget {
-  const _ActivityPanel({required this.services});
+  const _ActivityPanel({required this.services, required this.scale});
 
   final List<_ServicePulse> services;
+  final double scale;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: EdgeInsets.all(8 * scale),
       decoration: BoxDecoration(
         color: const Color(0xFF0D1526).withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(20 * scale),
         border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
       ),
       child: Column(
@@ -1424,29 +1565,35 @@ class _ActivityPanel extends StatelessWidget {
         children: [
           Text(
             'Live activity',
-            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontSize: (theme.textTheme.titleLarge?.fontSize ?? 22) * scale,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 1),
           Text(
             'A stylized pulse view of the services Serva is tracking right now.',
             style: theme.textTheme.bodyMedium?.copyWith(
+              fontSize: (theme.textTheme.bodyMedium?.fontSize ?? 14) * scale,
               color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
             ),
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: 6 * scale),
           if (services.isEmpty)
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: EdgeInsets.all(8 * scale),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.03),
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(16 * scale),
               ),
-              child: const Text('No live services yet. Create one and this dashboard will light up.'),
+              child: const Text(
+                'No live services yet. Create one and this dashboard will light up.',
+              ),
             )
           else
             for (var i = 0; i < services.length; i++) ...[
-              _ActivityRow(service: services[i]),
-              if (i != services.length - 1) const SizedBox(height: 6),
+              _ActivityRow(service: services[i], scale: scale),
+              if (i != services.length - 1) SizedBox(height: 6 * scale),
             ],
         ],
       ),
@@ -1455,20 +1602,23 @@ class _ActivityPanel extends StatelessWidget {
 }
 
 class _ActivityRow extends StatelessWidget {
-  const _ActivityRow({required this.service});
+  const _ActivityRow({required this.service, required this.scale});
 
   final _ServicePulse service;
+  final double scale;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = service.running ? const Color(0xFF80ED99) : const Color(0xFFFF7B72);
+    final accent = service.running
+        ? const Color(0xFF80ED99)
+        : const Color(0xFFFF7B72);
 
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: EdgeInsets.all(10 * scale),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(18 * scale),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1478,11 +1628,18 @@ class _ActivityRow extends StatelessWidget {
               Expanded(
                 child: Text(
                   service.name,
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontSize:
+                        (theme.textTheme.titleMedium?.fontSize ?? 16) * scale,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: EdgeInsets.symmetric(
+                  horizontal: 10 * scale,
+                  vertical: 6 * scale,
+                ),
                 decoration: BoxDecoration(
                   color: accent.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(999),
@@ -1490,6 +1647,8 @@ class _ActivityRow extends StatelessWidget {
                 child: Text(
                   service.running ? 'RUNNING' : 'IDLE',
                   style: theme.textTheme.labelSmall?.copyWith(
+                    fontSize:
+                        (theme.textTheme.labelSmall?.fontSize ?? 11) * scale,
                     color: accent,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 1,
@@ -1498,22 +1657,140 @@ class _ActivityRow extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: 4 * scale),
           SizedBox(
-            height: 20,
+            height: 20 * scale,
             child: CustomPaint(
               painter: _LineChartPainter(values: service.series, color: accent),
             ),
           ),
-          const SizedBox(height: 3),
+          SizedBox(height: 3 * scale),
           Row(
             children: [
-              _InlineMetric(label: 'Port', value: service.portLabel),
-              const SizedBox(width: 8),
-              _InlineMetric(label: 'Mode', value: service.lanEnabled ? 'LAN' : 'Local'),
-              const SizedBox(width: 8),
-              Expanded(child: _InlineMetric(label: 'Image', value: service.image)),
+              _InlineMetric(
+                label: 'Port',
+                value: service.portLabel,
+                scale: scale,
+              ),
+              SizedBox(width: 8 * scale),
+              _InlineMetric(
+                label: 'Mode',
+                value: service.lanEnabled ? 'LAN' : 'Local',
+                scale: scale,
+              ),
+              SizedBox(width: 8 * scale),
+              Expanded(
+                child: _InlineMetric(
+                  label: 'Image',
+                  value: service.image,
+                  scale: scale,
+                ),
+              ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DashboardSupportBanner extends StatelessWidget {
+  const _DashboardSupportBanner({required this.message, required this.scale});
+
+  final String message;
+  final double scale;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final virtualizationIssue = _looksLikeVirtualizationIssue(message);
+    final dockerUnavailable = _looksLikeDockerUnavailable(message);
+    final accent = virtualizationIssue
+        ? const Color(0xFFFFC857)
+        : const Color(0xFF4CC9F0);
+
+    return Container(
+      padding: EdgeInsets.all(8 * scale),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D1526).withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(16 * scale),
+        border: Border.all(color: accent.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            virtualizationIssue ? Icons.memory_rounded : Icons.download_rounded,
+            color: accent,
+          ),
+          SizedBox(width: 10 * scale),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  virtualizationIssue
+                      ? 'Virtualization may be required'
+                      : 'Docker Desktop may be required',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontSize: (theme.textTheme.titleSmall?.fontSize ?? 14) * scale,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                SizedBox(height: 4 * scale),
+                Text(
+                  virtualizationIssue
+                      ? 'Docker Desktop needs virtualization enabled to run. You may need to enable virtualization in Windows and in your BIOS/UEFI settings.'
+                      : 'Serva could not reach Docker Desktop. Install it or make sure it is running, then refresh the dashboard.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontSize: (theme.textTheme.bodySmall?.fontSize ?? 12) * scale,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.76),
+                  ),
+                ),
+                if (message.trim().isNotEmpty) ...[
+                  SizedBox(height: 4 * scale),
+                  Text(
+                    message,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontSize: (theme.textTheme.bodySmall?.fontSize ?? 12) * scale,
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.56,
+                      ),
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                SizedBox(height: 8 * scale),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (dockerUnavailable)
+                      OutlinedButton.icon(
+                        onPressed: () =>
+                            _openUrl(context, _dockerDesktopStoreUrl),
+                        icon: const Icon(Icons.download_rounded),
+                        label: const Text('Install Docker Desktop'),
+                      ),
+                    if (virtualizationIssue)
+                      OutlinedButton.icon(
+                        onPressed: () =>
+                            _openUrl(context, _virtualizationHelpUrl),
+                        icon: const Icon(Icons.memory_rounded),
+                        label: const Text('Virtualization Help'),
+                      ),
+                    OutlinedButton.icon(
+                      onPressed: () => context.read<MainBloc>().add(
+                        const MainLoadRequested(),
+                      ),
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Refresh'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -1524,25 +1801,42 @@ class _ActivityRow extends StatelessWidget {
 class _MissionPanel extends StatelessWidget {
   const _MissionPanel({
     required this.healthOk,
+    required this.lastMessage,
     required this.savedDefinitions,
     required this.services,
+    required this.scale,
   });
 
   final bool healthOk;
+  final String? lastMessage;
   final int savedDefinitions;
   final int services;
+  final double scale;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final readiness = (healthOk ? 44 : 18) + (services * 9) + (savedDefinitions * 4);
-    final readinessScore = readiness.clamp(0, 100);
+    final dockerUnavailable = _looksLikeDockerUnavailable(lastMessage);
+    final virtualizationIssue = _looksLikeVirtualizationIssue(lastMessage);
+    final dockerConnected = healthOk && !dockerUnavailable;
+    final virtualizationReady = !virtualizationIssue;
+    final controlPlaneReady = healthOk;
+    final readinessChecks = [
+      dockerConnected,
+      virtualizationReady,
+      controlPlaneReady,
+    ];
+    final readinessScore =
+        ((readinessChecks.where((check) => check).length /
+                    readinessChecks.length) *
+                100)
+            .round();
 
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: EdgeInsets.all(8 * scale),
       decoration: BoxDecoration(
         color: const Color(0xFF0D1526).withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(20 * scale),
         border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
       ),
       child: Column(
@@ -1550,13 +1844,16 @@ class _MissionPanel extends StatelessWidget {
         children: [
           Text(
             'Mission profile',
-            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontSize: (theme.textTheme.titleLarge?.fontSize ?? 22) * scale,
+              fontWeight: FontWeight.w700,
+            ),
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: 6 * scale),
           Center(
             child: SizedBox(
-              width: 112,
-              height: 112,
+              width: 92 * scale,
+              height: 92 * scale,
               child: CustomPaint(
                 painter: _GaugePainter(value: readinessScore / 100),
                 child: Center(
@@ -1565,13 +1862,22 @@ class _MissionPanel extends StatelessWidget {
                     children: [
                       Text(
                         '$readinessScore%',
-                        style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800),
+                        style: theme.textTheme.headlineMedium?.copyWith(
+                          fontSize:
+                              (theme.textTheme.headlineMedium?.fontSize ?? 28) *
+                              scale,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
-                      const SizedBox(height: 4),
+                      SizedBox(height: 4 * scale),
                       Text(
                         'Readiness',
                         style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
+                          fontSize:
+                              (theme.textTheme.bodyMedium?.fontSize ?? 14) * scale,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.72,
+                          ),
                         ),
                       ),
                     ],
@@ -1580,23 +1886,44 @@ class _MissionPanel extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: 6 * scale),
           _ChecklistItem(
-            title: healthOk ? 'Control plane reachable' : 'Control plane degraded',
-            subtitle: healthOk ? 'Serva can talk to the local daemon.' : 'Backend or Docker needs attention.',
-            success: healthOk,
+            title: dockerConnected ? 'Docker connected' : 'Docker unavailable',
+            subtitle: dockerConnected
+                ? 'Docker Desktop is reachable from Serva.'
+                : 'Install or start Docker Desktop so Serva can manage services.',
+            success: dockerConnected,
+            scale: scale,
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: 4 * scale),
           _ChecklistItem(
-            title: '$services services under management',
-            subtitle: 'Live containers are currently reflected in the command center.',
-            success: services > 0,
+            title: virtualizationReady
+                ? 'Virtualization ready'
+                : 'Virtualization required',
+            subtitle: virtualizationReady
+                ? 'Hardware virtualization looks ready for Docker Desktop.'
+                : 'You may need to enable virtualization in Windows and BIOS/UEFI.',
+            success: virtualizationReady,
+            scale: scale,
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: 4 * scale),
           _ChecklistItem(
-            title: '$savedDefinitions saved definitions',
-            subtitle: 'Recreation metadata is available for durability workflows.',
-            success: savedDefinitions > 0,
+            title: controlPlaneReady
+                ? 'Control plane reachable'
+                : 'Control plane degraded',
+            subtitle: controlPlaneReady
+                ? 'Serva can talk to the local daemon.'
+                : 'Backend or Docker needs attention before services can be managed.',
+            success: controlPlaneReady,
+            scale: scale,
+          ),
+          SizedBox(height: 4 * scale),
+          _ChecklistItem(
+            title: '$services services, $savedDefinitions saved',
+            subtitle:
+                'Inventory count for live services and saved recovery definitions.',
+            success: services > 0 || savedDefinitions > 0,
+            scale: scale,
           ),
         ],
       ),
@@ -1609,11 +1936,13 @@ class _ChecklistItem extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.success,
+    required this.scale,
   });
 
   final String title;
   final String subtitle;
   final bool success;
+  final double scale;
 
   @override
   Widget build(BuildContext context) {
@@ -1624,23 +1953,29 @@ class _ChecklistItem extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(top: 2),
+          padding: EdgeInsets.only(top: 2 * scale),
           child: Icon(
             success ? Icons.verified_rounded : Icons.timelapse_rounded,
             color: color,
-            size: 20,
+            size: 20 * scale,
           ),
         ),
-        const SizedBox(width: 10),
+        SizedBox(width: 10 * scale),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: theme.textTheme.titleSmall),
-              const SizedBox(height: 2),
+              Text(
+                title,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontSize: (theme.textTheme.titleSmall?.fontSize ?? 14) * scale,
+                ),
+              ),
+              SizedBox(height: 2 * scale),
               Text(
                 subtitle,
                 style: theme.textTheme.bodySmall?.copyWith(
+                  fontSize: (theme.textTheme.bodySmall?.fontSize ?? 12) * scale,
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
                 ),
               ),
@@ -1657,32 +1992,53 @@ class _MiniStatStrip extends StatelessWidget {
     required this.label,
     required this.value,
     required this.accent,
+    required this.scale,
   });
 
   final String label;
   final String value;
   final Color accent;
+  final double scale;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: EdgeInsets.symmetric(
+        horizontal: 10 * scale,
+        vertical: 8 * scale,
+      ),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(14 * scale),
       ),
       child: Row(
         children: [
           Container(
-            width: 10,
-            height: 10,
+            width: 8 * scale,
+            height: 8 * scale,
             decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
           ),
-          const SizedBox(width: 10),
-          Expanded(child: Text(label)),
+          SizedBox(width: 8 * scale),
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontSize:
+                    (Theme.of(context).textTheme.bodyMedium?.fontSize ?? 14) *
+                    scale,
+              ),
+            ),
+          ),
           Text(
             value,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(
+              fontSize:
+                  (Theme.of(context).textTheme.titleSmall?.fontSize ?? 14) *
+                  scale,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
@@ -1691,10 +2047,15 @@ class _MiniStatStrip extends StatelessWidget {
 }
 
 class _InlineMetric extends StatelessWidget {
-  const _InlineMetric({required this.label, required this.value});
+  const _InlineMetric({
+    required this.label,
+    required this.value,
+    required this.scale,
+  });
 
   final String label;
   final String value;
+  final double scale;
 
   @override
   Widget build(BuildContext context) {
@@ -1706,14 +2067,18 @@ class _InlineMetric extends StatelessWidget {
         Text(
           label.toUpperCase(),
           style: theme.textTheme.labelSmall?.copyWith(
+            fontSize: (theme.textTheme.labelSmall?.fontSize ?? 11) * scale,
             color: theme.colorScheme.onSurface.withValues(alpha: 0.58),
             letterSpacing: 1,
           ),
         ),
-        const SizedBox(height: 2),
+        SizedBox(height: 2 * scale),
         Text(
           value,
-          style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontSize: (theme.textTheme.bodyMedium?.fontSize ?? 14) * scale,
+            fontWeight: FontWeight.w600,
+          ),
           overflow: TextOverflow.ellipsis,
         ),
       ],
@@ -1841,7 +2206,9 @@ class _HistoryBarsPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _HistoryBarsPainter oldDelegate) {
-    return oldDelegate.values != values || oldDelegate.color != color || oldDelegate.tick != tick;
+    return oldDelegate.values != values ||
+        oldDelegate.color != color ||
+        oldDelegate.tick != tick;
   }
 }
 
@@ -1875,10 +2242,7 @@ class _AreaChartPainter extends CustomPainter {
       ..shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [
-          color.withValues(alpha: 0.35),
-          color.withValues(alpha: 0.02),
-        ],
+        colors: [color.withValues(alpha: 0.35), color.withValues(alpha: 0.02)],
       ).createShader(Offset.zero & size);
 
     final linePaint = Paint()
@@ -1917,11 +2281,7 @@ class _GaugePainter extends CustomPainter {
       ..shader = const SweepGradient(
         startAngle: -pi / 2,
         endAngle: 3 * pi / 2,
-        colors: [
-          Color(0xFF4CC9F0),
-          Color(0xFF80ED99),
-          Color(0xFFFFC857),
-        ],
+        colors: [Color(0xFF4CC9F0), Color(0xFF80ED99), Color(0xFFFFC857)],
       ).createShader(Rect.fromCircle(center: center, radius: radius))
       ..strokeWidth = 14
       ..style = PaintingStyle.stroke
@@ -1967,9 +2327,10 @@ class _ServicePulse {
     final base = running ? 62.0 : 22.0;
     final series = List<double>.generate(
       16,
-      (index) => (base + sin((index + seed) / 2) * 14 + (random.nextDouble() * 9 - 4))
-          .clamp(5, 96)
-          .toDouble(),
+      (index) =>
+          (base + sin((index + seed) / 2) * 14 + (random.nextDouble() * 9 - 4))
+              .clamp(5, 96)
+              .toDouble(),
     );
 
     return _ServicePulse(
@@ -1981,6 +2342,41 @@ class _ServicePulse {
       series: series,
     );
   }
+}
+
+bool _looksLikeDockerUnavailable(String? message) {
+  if (message == null || message.trim().isEmpty) {
+    return false;
+  }
+
+  final normalized = message.toLowerCase();
+  return normalized.contains('docker') ||
+      normalized.contains('health check failed') ||
+      normalized.contains('connection refused') ||
+      normalized.contains('actively refused') ||
+      normalized.contains('daemon not reachable');
+}
+
+bool _looksLikeVirtualizationIssue(String? message) {
+  if (_forceDashboardVirtualizationPreview) {
+    return true;
+  }
+
+  if (message == null || message.trim().isEmpty) {
+    return false;
+  }
+
+  final normalized = message.toLowerCase();
+  return normalized.contains('virtualization') ||
+      normalized.contains('hyper-v') ||
+      normalized.contains('hyperv') ||
+      normalized.contains('wsl') ||
+      normalized.contains('bios') ||
+      normalized.contains('uefi') ||
+      normalized.contains('hardware assisted virtualization') ||
+      normalized.contains('required feature is not installed') ||
+      normalized.contains('vmx') ||
+      normalized.contains('svm');
 }
 
 Future<void> _openUrl(BuildContext context, String url) async {
@@ -2110,7 +2506,9 @@ double _cpuPercentFromStats(Map<String, dynamic> raw) {
   final onlineCpus = _asDouble(cpuStats['online_cpus']);
   final cores = onlineCpus > 0
       ? onlineCpus
-      : (_listValue(cpuUsage['percpu_usage']).isNotEmpty ? _listValue(cpuUsage['percpu_usage']).length.toDouble() : 1);
+      : (_listValue(cpuUsage['percpu_usage']).isNotEmpty
+            ? _listValue(cpuUsage['percpu_usage']).length.toDouble()
+            : 1);
 
   if (cpuDelta <= 0 || systemDelta <= 0) {
     return 0;
@@ -2192,7 +2590,11 @@ String _formatBytes(double bytes) {
     unitIndex++;
   }
 
-  final precision = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  final precision = value >= 100
+      ? 0
+      : value >= 10
+      ? 1
+      : 2;
   return '${value.toStringAsFixed(precision)} ${units[unitIndex]}';
 }
 
@@ -2203,6 +2605,14 @@ List<double> _normalizeSeries(List<double> values) {
     return List<double>.filled(values.length, 0);
   }
   return values.map((value) => (value / maxValue) * 100).toList();
+}
+
+double _dashboardUiScale(double width) {
+  if (width >= 1700) return 0.76;
+  if (width >= 1500) return 0.82;
+  if (width >= 1300) return 0.9;
+  if (width >= 1100) return 0.96;
+  return 1.0;
 }
 
 String _servaManagedBasePath() {

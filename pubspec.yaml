@@ -39,6 +39,7 @@ dependencies:
   json_annotation: ^4.9.0
   flutter_bloc: ^9.1.1
   url_launcher: ^6.3.2
+  path_provider: ^2.1.5
 
 msix_config:
   display_name: Serva

@@ -1,16 +1,31 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:serva/api/go_models.dart';
 import 'package:serva/bloc/main_bloc.dart';
 import 'package:serva/bloc/main_event.dart';
+import 'package:serva/bloc/main_state.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class TemplateGalleryScreen extends StatelessWidget {
+part 'launch/template_gallery_support.dart';
+
+class TemplateGalleryScreen extends StatefulWidget {
   const TemplateGalleryScreen({super.key});
+
+  static final ValueNotifier<List<_TemplateCardModel>> customTemplates =
+      ValueNotifier<List<_TemplateCardModel>>(<_TemplateCardModel>[]);
+  static final ValueNotifier<Set<String>> verifiedTemplateKeys =
+      ValueNotifier<Set<String>>(<String>{});
+
+  static void resetLocalTemplateState() {
+    customTemplates.value = <_TemplateCardModel>[];
+    verifiedTemplateKeys.value = _defaultVerifiedTemplateKeys();
+  }
 
   static const templates = <_TemplateCardModel>[
     _TemplateCardModel(
@@ -176,6 +191,18 @@ class TemplateGalleryScreen extends StatelessWidget {
   ];
 
   @override
+  State<TemplateGalleryScreen> createState() => _TemplateGalleryScreenState();
+}
+
+class _TemplateGalleryScreenState extends State<TemplateGalleryScreen> {
+  @override
+  void initState() {
+    super.initState();
+    _loadPersistedVerifiedTemplates();
+    _loadPersistedCustomTemplates();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final textColor = theme.colorScheme.onSurface;
@@ -263,43 +290,179 @@ class TemplateGalleryScreen extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 10),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final width = constraints.maxWidth;
-              final crossAxisCount = width >= 1600
-                  ? 7
-                  : width >= 1350
-                  ? 6
-                  : width >= 1150
-                  ? 5
-                  : width >= 900
-                  ? 4
-                  : width >= 700
-                  ? 3
-                  : width >= 520
-                  ? 2
-                  : 1;
+          ValueListenableBuilder<Set<String>>(
+            valueListenable: TemplateGalleryScreen.verifiedTemplateKeys,
+            builder: (context, verifiedKeys, _) {
+              final builtInExperimental = TemplateGalleryScreen.templates
+                  .where((template) => !verifiedKeys.contains(_templateKey(template)))
+                  .toList();
 
-              return GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: crossAxisCount,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  childAspectRatio: crossAxisCount == 1 ? 2.4 : crossAxisCount >= 5 ? 1.08 : 1.14,
-                ),
-                itemCount: templates.length,
-                itemBuilder: (context, index) {
-                  final template = templates[index];
-                  return _TemplateTile(template: template);
+              return ValueListenableBuilder<List<_TemplateCardModel>>(
+                valueListenable: TemplateGalleryScreen.customTemplates,
+                builder: (context, customTemplatesValue, _) {
+                  final verifiedBuiltIns = TemplateGalleryScreen.templates
+                      .where((template) => verifiedKeys.contains(_templateKey(template)))
+                      .toList();
+                  final verifiedCustom = customTemplatesValue
+                      .where((template) => verifiedKeys.contains(_templateKey(template)))
+                      .toList();
+                  final experimentalCustom = customTemplatesValue
+                      .where((template) => !verifiedKeys.contains(_templateKey(template)))
+                      .toList();
+
+                  final allExperimental = [
+                    ...experimentalCustom,
+                    ...builtInExperimental,
+                  ];
+
+                  final allVerified = [
+                    ...verifiedBuiltIns,
+                    ...verifiedCustom,
+                  ];
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _TemplateSection(
+                        title: 'Verified',
+                        subtitle: 'Templates we have personally smoke-tested.',
+                        templates: allVerified,
+                      ),
+                      const SizedBox(height: 10),
+                      _TemplateSection(
+                        title: 'Experimental',
+                        subtitle: 'Everything else, including pasted images and unverified presets.',
+                        templates: allExperimental,
+                      ),
+                    ],
+                  );
                 },
               );
             },
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _loadPersistedCustomTemplates() async {
+    try {
+      final file = await _existingServaLocalMetadataFile('custom_templates.json');
+      if (!await file.exists()) return;
+
+      final raw = await file.readAsString();
+      if (raw.trim().isEmpty) return;
+
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return;
+
+      final images = decoded
+          .whereType<String>()
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
+          .toSet()
+          .toList();
+
+      TemplateGalleryScreen.customTemplates.value =
+          images.map(_customTemplateFromImage).toList();
+    } catch (_) {
+      // Keep launch page usable even if local template storage fails.
+    }
+  }
+
+  Future<void> _loadPersistedVerifiedTemplates() async {
+    try {
+      final file = await _existingServaLocalMetadataFile('verified_templates.json');
+      if (!await file.exists()) {
+        TemplateGalleryScreen.verifiedTemplateKeys.value = _defaultVerifiedTemplateKeys();
+        return;
+      }
+
+      final raw = await file.readAsString();
+      if (raw.trim().isEmpty) {
+        TemplateGalleryScreen.verifiedTemplateKeys.value = _defaultVerifiedTemplateKeys();
+        return;
+      }
+
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) {
+        TemplateGalleryScreen.verifiedTemplateKeys.value = _defaultVerifiedTemplateKeys();
+        return;
+      }
+
+      TemplateGalleryScreen.verifiedTemplateKeys.value = decoded
+          .whereType<String>()
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
+          .toSet();
+    } catch (_) {
+      TemplateGalleryScreen.verifiedTemplateKeys.value = _defaultVerifiedTemplateKeys();
+    }
+  }
+}
+
+class _TemplateSection extends StatelessWidget {
+  const _TemplateSection({
+    required this.title,
+    required this.subtitle,
+    required this.templates,
+  });
+
+  final String title;
+  final String subtitle;
+  final List<_TemplateCardModel> templates;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          subtitle,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+          ),
+        ),
+        const SizedBox(height: 8),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            final crossAxisCount = width >= 1600
+                ? 7
+                : width >= 1350
+                ? 6
+                : width >= 1150
+                ? 5
+                : width >= 900
+                ? 4
+                : width >= 700
+                ? 3
+                : width >= 520
+                ? 2
+                : 1;
+
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                childAspectRatio: crossAxisCount == 1 ? 2.4 : crossAxisCount >= 5 ? 1.08 : 1.14,
+              ),
+              itemCount: templates.length,
+              itemBuilder: (context, index) => _TemplateTile(template: templates[index]),
+            );
+          },
+        ),
+      ],
     );
   }
 }
@@ -315,6 +478,8 @@ class _TemplateTile extends StatelessWidget {
     final baseSurface = theme.colorScheme.surfaceContainerHigh;
     final titleColor = theme.colorScheme.onSurface;
     final bodyColor = titleColor.withValues(alpha: 0.74);
+    final isVerified =
+        TemplateGalleryScreen.verifiedTemplateKeys.value.contains(_templateKey(template));
 
     return Material(
       color: Colors.transparent,
@@ -357,21 +522,39 @@ class _TemplateTile extends StatelessWidget {
                       child: Icon(template.icon, size: 18, color: template.accent),
                     ),
                     const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: template.accent.withValues(alpha: 0.16),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        template.subtitle.toUpperCase(),
-                        style: TextStyle(
-                          color: titleColor,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 9,
-                          letterSpacing: 0.7,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          tooltip: isVerified ? 'Move to Experimental' : 'Move to Verified',
+                          onPressed: () => _toggleVerified(template),
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                          icon: Icon(
+                            isVerified ? Icons.verified_rounded : Icons.science_outlined,
+                            size: 18,
+                            color: isVerified ? const Color(0xFF80ED99) : titleColor.withValues(alpha: 0.72),
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: template.accent.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            template.subtitle.toUpperCase(),
+                            style: TextStyle(
+                              color: titleColor,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 9,
+                              letterSpacing: 0.7,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -432,147 +615,193 @@ class _TemplateTile extends StatelessWidget {
     );
   }
 
-  void _createFromTemplate(BuildContext context, _TemplateCardModel template) {
+  Future<void> _createFromTemplate(BuildContext context, _TemplateCardModel template) async {
     final bloc = context.read<MainBloc>();
-    final serviceName = _generatedServiceName(template.name);
-    final mounts = _defaultMountsForTemplate(template.name, serviceName);
+    final launchConfig = await _showTemplateLaunchFlow(context, template);
+    if (launchConfig == null || !context.mounted) return;
 
     bloc.add(
       MainCreateServiceRequested(
-        name: serviceName,
+        name: launchConfig.serviceName,
         image: template.image,
         containerPort: template.port,
-        mounts: mounts,
+        mounts: launchConfig.mounts,
       ),
     );
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Creating ${template.label}...'),
+        content: Text('Creating ${launchConfig.serviceName}...'),
         behavior: SnackBarBehavior.floating,
       ),
     );
   }
-}
 
-class _MetaPill extends StatelessWidget {
-  const _MetaPill({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: theme.colorScheme.onSurface,
-          fontWeight: FontWeight.w600,
-          fontSize: 11,
-        ),
-      ),
-    );
+  void _toggleVerified(_TemplateCardModel template) {
+    final current = Set<String>.from(TemplateGalleryScreen.verifiedTemplateKeys.value);
+    final key = _templateKey(template);
+    if (current.contains(key)) {
+      current.remove(key);
+    } else {
+      current.add(key);
+    }
+    TemplateGalleryScreen.verifiedTemplateKeys.value = current;
+    _persistVerifiedTemplates();
   }
 }
 
-class _TemplateCardModel {
-  const _TemplateCardModel({
-    required this.label,
-    required this.subtitle,
-    required this.description,
-    required this.name,
-    required this.image,
-    required this.port,
-    required this.icon,
-    required this.accent,
-  });
 
-  final String label;
-  final String subtitle;
-  final String description;
-  final String name;
-  final String image;
-  final int port;
-  final IconData icon;
-  final Color accent;
-}
+Future<_TemplateLaunchConfig?> _showTemplateLaunchFlow(
+  BuildContext context,
+  _TemplateCardModel template,
+) async {
+  final existingDataOptions = _existingDataOptions(context);
+  final nameController = TextEditingController(text: _generatedServiceName(template.name));
+  String? selectedRoot;
 
-String _generatedServiceName(String baseName) {
-  final suffix = Random().nextInt(9000) + 1000;
-  return '$baseName-$suffix';
-}
+  final result = await showModalBottomSheet<_TemplateLaunchConfig>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) {
+      final theme = Theme.of(context);
+      return StatefulBuilder(
+        builder: (context, setSheetState) {
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 12,
+              right: 12,
+              top: 12,
+              bottom: MediaQuery.of(context).viewInsets.bottom + 12,
+            ),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: theme.colorScheme.outlineVariant),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: template.accent.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(template.icon, color: template.accent, size: 18),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Launch ${template.label}',
+                              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Set a name and optionally reuse an existing Serva data folder.',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Instance name',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String?>(
+                    value: selectedRoot,
+                    decoration: const InputDecoration(
+                      labelText: 'Data folder',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Create new managed data folder'),
+                      ),
+                      ...existingDataOptions.map(
+                        (option) => DropdownMenuItem<String?>(
+                          value: option.rootPath,
+                          child: Text(option.label, overflow: TextOverflow.ellipsis),
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setSheetState(() {
+                        selectedRoot = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    selectedRoot == null
+                        ? 'Serva will create a new managed folder under Documents\\Serva.'
+                        : 'Serva will bind this template to the existing folder structure.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.68),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('Cancel'),
+                      ),
+                      const Spacer(),
+                      FilledButton(
+                        onPressed: () {
+                          final serviceName = nameController.text.trim();
+                          if (serviceName.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Please enter an instance name.')),
+                            );
+                            return;
+                          }
 
-String _defaultManagedBasePath() {
-  final userProfile = Platform.environment['USERPROFILE'];
-  if (userProfile != null && userProfile.trim().isNotEmpty) {
-    return '$userProfile\\Documents\\Serva';
-  }
+                          Navigator.of(context).pop(
+                            _TemplateLaunchConfig(
+                              serviceName: serviceName,
+                              mounts: _defaultMountsForTemplate(
+                                template.name,
+                                serviceName,
+                                rootOverride: selectedRoot,
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text('Launch'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
 
-  final home = Platform.environment['HOME'];
-  if (home != null && home.trim().isNotEmpty) {
-    return '$home${Platform.pathSeparator}Documents${Platform.pathSeparator}Serva';
-  }
-
-  return 'Documents${Platform.pathSeparator}Serva';
-}
-
-String _defaultMountRootForName(String serviceName) {
-  final sanitized = serviceName.trim().replaceAll(RegExp(r'[^a-zA-Z0-9_-]+'), '-');
-  return '${_defaultManagedBasePath()}\\$sanitized';
-}
-
-List<String> _defaultMountTargetsForTemplate(String templateName) {
-  switch (templateName) {
-    case 'navidrome':
-      return const ['/data', '/music'];
-    case 'uptime-kuma':
-      return const ['/app/data'];
-    case 'vaultwarden':
-      return const ['/data'];
-    case 'grafana':
-      return const ['/var/lib/grafana'];
-    case 'nextcloud':
-      return const ['/var/www/html'];
-    case 'jellyfin':
-      return const ['/config'];
-    case 'gitea':
-      return const ['/data'];
-    default:
-      return const ['/data'];
-  }
-}
-
-List<GoServiceDefinitionMount> _defaultMountsForTemplate(String templateName, String serviceName) {
-  final root = _defaultMountRootForName(serviceName);
-  return _defaultMountTargetsForTemplate(templateName)
-      .map(
-        (target) => GoServiceDefinitionMount(
-          type: 'bind',
-          source: '$root\\${_subfolderNameForTarget(target)}',
-          target: target,
-          readOnly: false,
-          managed: true,
-        ),
-      )
-      .toList();
-}
-
-String _subfolderNameForTarget(String target) {
-  final segments = target.split('/').where((segment) => segment.trim().isNotEmpty).toList();
-  if (segments.isEmpty) {
-    return 'data';
-  }
-  return segments.join('-');
+  nameController.dispose();
+  return result;
 }
 
 Future<void> _openInfiniteTemplates(BuildContext context) async {
@@ -601,32 +830,204 @@ Future<void> _pasteImageOrCommand(BuildContext context) async {
     return;
   }
 
-  final serviceName = _suggestNameFromImage(image);
-  final mounts = _defaultMountsForTemplate('custom', serviceName);
+  final launchConfig = await _showCustomImageLaunchFlow(
+    context,
+    image: image,
+    suggestedName: _suggestNameFromImage(image),
+  );
+  if (launchConfig == null || !context.mounted) return;
+
+  _registerCustomTemplate(image);
 
   bloc.add(
     MainCreateServiceRequested(
-      name: serviceName,
+      name: launchConfig.serviceName,
       image: image,
       containerPort: 80,
-      mounts: mounts,
+      mounts: launchConfig.mounts,
     ),
   );
 
-  if (!context.mounted) return;
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
-      content: Text('Creating $serviceName from clipboard image...'),
+      content: Text('Creating ${launchConfig.serviceName} from clipboard image...'),
       behavior: SnackBarBehavior.floating,
     ),
   );
+}
+
+void _registerCustomTemplate(String image) {
+  final current = List<_TemplateCardModel>.from(TemplateGalleryScreen.customTemplates.value);
+  if (current.any((template) => template.image == image)) {
+    return;
+  }
+
+  current.insert(0, _customTemplateFromImage(image));
+
+  TemplateGalleryScreen.customTemplates.value = current;
+  _persistCustomTemplates();
+}
+
+Future<_TemplateLaunchConfig?> _showCustomImageLaunchFlow(
+  BuildContext context, {
+  required String image,
+  required String suggestedName,
+}) async {
+  final existingDataOptions = _existingDataOptions(context);
+  final nameController = TextEditingController(text: suggestedName);
+  String? selectedRoot;
+
+  final result = await showModalBottomSheet<_TemplateLaunchConfig>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) {
+      final theme = Theme.of(context);
+      return StatefulBuilder(
+        builder: (context, setSheetState) {
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 12,
+              right: 12,
+              top: 12,
+              bottom: MediaQuery.of(context).viewInsets.bottom + 12,
+            ),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: theme.colorScheme.outlineVariant),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Launch pasted image',
+                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    image,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Instance name',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String?>(
+                    value: selectedRoot,
+                    decoration: const InputDecoration(
+                      labelText: 'Data folder',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Create new managed data folder'),
+                      ),
+                      ...existingDataOptions.map(
+                        (option) => DropdownMenuItem<String?>(
+                          value: option.rootPath,
+                          child: Text(option.label, overflow: TextOverflow.ellipsis),
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setSheetState(() {
+                        selectedRoot = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('Cancel'),
+                      ),
+                      const Spacer(),
+                      FilledButton(
+                        onPressed: () {
+                          final serviceName = nameController.text.trim();
+                          if (serviceName.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Please enter an instance name.')),
+                            );
+                            return;
+                          }
+
+                          Navigator.of(context).pop(
+                            _TemplateLaunchConfig(
+                              serviceName: serviceName,
+                              mounts: _defaultMountsForTemplate(
+                                'custom',
+                                serviceName,
+                                rootOverride: selectedRoot,
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text('Launch'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
+
+  nameController.dispose();
+  return result;
+}
+
+List<_ExistingDataOption> _existingDataOptions(BuildContext context) {
+  final options = <_ExistingDataOption>[];
+  final state = context.read<MainBloc>().state;
+  final labelByRoot = <String, String>{};
+
+  if (state is MainLoaded) {
+    for (final definition in state.definitions) {
+      final root = _dataRootFromDefinition(definition);
+      if (root == null || root.trim().isEmpty) continue;
+      labelByRoot[root] = '${definition.name} (${_folderName(root)})';
+    }
+  }
+
+  final baseDir = Directory(_defaultManagedBasePath());
+  if (baseDir.existsSync()) {
+    for (final entity in baseDir.listSync(followLinks: false).whereType<Directory>()) {
+      final root = entity.path;
+      options.add(
+        _ExistingDataOption(
+          rootPath: root,
+          label: labelByRoot[root] ?? _folderName(root),
+        ),
+      );
+    }
+  }
+
+  options.sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
+  return options;
 }
 
 String? _extractImageFromPaste(String input) {
   final text = input.trim();
   if (text.isEmpty) return null;
 
-  final pull = RegExp(r'\bdocker\s+pull\s+([^\s]+)', caseSensitive: false);
+  final pull = RegExp(r'\bdocker(?:\s+model)?\s+pull\s+([^\s]+)', caseSensitive: false);
   final match = pull.firstMatch(text);
   if (match != null) {
     return match.group(1)?.trim();
@@ -665,4 +1066,80 @@ String _suggestNameFromImage(String image) {
 
   final suffix = Random().nextInt(9000) + 1000;
   return '$base-$suffix';
+}
+
+_TemplateCardModel _customTemplateFromImage(String image) {
+  return _TemplateCardModel(
+    label: _titleFromImage(image),
+    subtitle: 'Pasted Image',
+    description: image,
+    name: _templateNameFromImage(image),
+    image: image,
+    port: 80,
+    icon: Icons.auto_awesome_motion_rounded,
+    accent: const Color(0xFFA0C4FF),
+  );
+}
+
+Future<File> _customTemplateFile() => _servaLocalMetadataFile('custom_templates.json');
+
+Future<File> _verifiedTemplateFile() => _servaLocalMetadataFile('verified_templates.json');
+
+Future<File> _existingServaLocalMetadataFile(String fileName) async {
+  final folder = Directory(
+    '${_defaultManagedBasePath()}${Platform.pathSeparator}serva-local',
+  );
+  return File('${folder.path}${Platform.pathSeparator}$fileName');
+}
+
+Future<void> _persistCustomTemplates() async {
+  try {
+    final file = await _customTemplateFile();
+    final images = TemplateGalleryScreen.customTemplates.value
+        .map((template) => template.image)
+        .where((image) => image.trim().isNotEmpty)
+        .toList();
+    await file.writeAsString(jsonEncode(images));
+  } catch (_) {
+    // Non-fatal: launch screen still works even if template persistence fails.
+  }
+}
+
+Future<void> _persistVerifiedTemplates() async {
+  try {
+    final file = await _verifiedTemplateFile();
+    final keys = TemplateGalleryScreen.verifiedTemplateKeys.value.toList()..sort();
+    await file.writeAsString(jsonEncode(keys));
+  } catch (_) {
+    // Non-fatal: launch screen still works even if verified persistence fails.
+  }
+}
+
+Future<File> _servaLocalMetadataFile(String fileName) async {
+  final folder = Directory(
+    '${_defaultManagedBasePath()}${Platform.pathSeparator}serva-local',
+  );
+  if (!await folder.exists()) {
+    await folder.create(recursive: true);
+  }
+
+  final target = File('${folder.path}${Platform.pathSeparator}$fileName');
+  if (!await target.exists()) {
+    final legacy = await _legacyMetadataFile(fileName);
+    if (await legacy.exists()) {
+      try {
+        await legacy.copy(target.path);
+      } catch (_) {
+        // If migration fails, we'll just start fresh in the new location.
+      }
+    }
+  }
+
+  return target;
+}
+
+Future<File> _legacyMetadataFile(String fileName) async {
+  final directory = await getApplicationSupportDirectory();
+  final folder = Directory('${directory.path}${Platform.pathSeparator}serva');
+  return File('${folder.path}${Platform.pathSeparator}$fileName');
 }

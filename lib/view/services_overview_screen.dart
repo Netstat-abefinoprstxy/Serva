@@ -12,11 +12,19 @@ import 'package:serva/bloc/main_state.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'service_details_sheet.dart';
+import 'template_gallery_screen.dart';
 
 class ServicesOverviewScreen extends StatefulWidget {
-  const ServicesOverviewScreen({super.key, required this.state});
+  const ServicesOverviewScreen({
+    super.key,
+    required this.state,
+    required this.legacyModeEnabled,
+    required this.onLegacyModeChanged,
+  });
 
   final MainLoaded state;
+  final bool legacyModeEnabled;
+  final ValueChanged<bool> onLegacyModeChanged;
 
   @override
   State<ServicesOverviewScreen> createState() => _ServicesOverviewScreenState();
@@ -33,9 +41,7 @@ class _ServicesOverviewScreenState extends State<ServicesOverviewScreen> {
     _metricsFuture = _loadMetrics();
     _refreshTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       if (!mounted) return;
-      setState(() {
-        _metricsFuture = _loadMetrics();
-      });
+      _refreshLocalMetrics();
     });
   }
 
@@ -52,6 +58,13 @@ class _ServicesOverviewScreenState extends State<ServicesOverviewScreen> {
   void dispose() {
     _refreshTimer?.cancel();
     super.dispose();
+  }
+
+  void _refreshLocalMetrics() {
+    if (!mounted) return;
+    setState(() {
+      _metricsFuture = _loadMetrics();
+    });
   }
 
   Future<_ServicesMetrics> _loadMetrics() async {
@@ -80,18 +93,183 @@ class _ServicesOverviewScreenState extends State<ServicesOverviewScreen> {
 
     final serviceStorageBytes = await _loadServaStorageMetrics(definitions);
     final serviceMountRoots = <String, String>{};
+    final dataEntriesByRoot = <String, _DataEntry>{};
+    final servaRoot = _servaLocalDataPath();
+
+    dataEntriesByRoot[servaRoot] = _DataEntry(
+      serviceId: '',
+      serviceName: 'Serva Local Data',
+      image: 'Shared Serva storage',
+      rootPath: servaRoot,
+      isDeployed: false,
+      mounts: const [],
+      isOrphaned: false,
+      isGlobalRoot: true,
+    );
+
     for (final definition in definitions) {
       final root = _serviceMountRootFromDefinition(definition);
       if (root != null && root.isNotEmpty) {
         serviceMountRoots[definition.name] = root;
       }
+
+      final dataRoot = _dataRootFromDefinition(definition);
+      if (dataRoot != null) {
+        dataEntriesByRoot[dataRoot] = _DataEntry(
+          serviceId: definition.id,
+          serviceName: definition.name,
+          image: definition.image,
+          rootPath: dataRoot,
+          isDeployed: definition.isDeployed,
+          mounts: definition.mounts
+              .where((mount) => mount.managed && mount.type.trim().toLowerCase() == 'bind')
+              .toList(),
+          isOrphaned: false,
+          isGlobalRoot: false,
+        );
+      }
     }
+
+    for (final orphanRoot in _discoverServaDataRoots()) {
+      dataEntriesByRoot.putIfAbsent(
+        orphanRoot,
+        () {
+          final folderName = orphanRoot.split(RegExp(r'[\\/]')).last.trim();
+          return _DataEntry(
+            serviceId: '',
+            serviceName: folderName.isEmpty ? 'Unlinked data' : folderName,
+            image: 'No saved definition',
+            rootPath: orphanRoot,
+            isDeployed: false,
+            mounts: const [],
+            isOrphaned: true,
+            isGlobalRoot: false,
+          );
+        },
+      );
+    }
+
+    final dataEntries = dataEntriesByRoot.values.toList()
+      ..sort((a, b) {
+        if (a.isGlobalRoot != b.isGlobalRoot) {
+          return a.isGlobalRoot ? -1 : 1;
+        }
+        if (a.isOrphaned != b.isOrphaned) {
+          return a.isOrphaned ? 1 : -1;
+        }
+        return a.serviceName.toLowerCase().compareTo(b.serviceName.toLowerCase());
+      });
+
+    final dataFolderSizes = await _loadFolderSizes(
+      dataEntries.map((entry) => entry.rootPath).toSet().toList(),
+    );
+    final miscSubfolders = _loadMiscSubfolders(dataEntries);
 
     return _ServicesMetrics(
       liveMetrics: liveMetrics,
       serviceStorageBytes: serviceStorageBytes,
       serviceMountRoots: serviceMountRoots,
+      dataEntries: dataEntries
+          .map(
+            (entry) => entry.copyWith(
+              sizeBytes: dataFolderSizes[entry.rootPath] ?? 0,
+              miscSubfolders: miscSubfolders[entry.rootPath] ?? const [],
+            ),
+          )
+          .toList(),
     );
+  }
+
+  List<String> _discoverServaDataRoots() {
+    final base = Directory(_servaManagedBasePath());
+    if (!base.existsSync()) {
+      return const [];
+    }
+
+    try {
+      return base
+          .listSync(followLinks: false)
+          .whereType<Directory>()
+          .where((directory) => _folderLeafName(directory.path).toLowerCase() != 'serva-local')
+          .map((directory) => directory.path)
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<Map<String, double>> _loadFolderSizes(List<String> roots) async {
+    if (roots.isEmpty) return const {};
+
+    final command = StringBuffer()..writeln("\$folders = [ordered]@{}");
+    for (final root in roots) {
+      command
+        ..writeln("\$folderPath = '${_psEscape(root)}'")
+        ..writeln("if (Test-Path -LiteralPath \$folderPath) {")
+        ..writeln("  \$sum = (Get-ChildItem -LiteralPath \$folderPath -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum")
+        ..writeln("  \$folders['${_psEscape(root)}'] = if (\$null -eq \$sum) { 0 } else { [double]\$sum }")
+        ..writeln("} else {")
+        ..writeln("  \$folders['${_psEscape(root)}'] = 0")
+        ..writeln("}");
+    }
+    command.writeln("\$folders | ConvertTo-Json -Compress");
+
+    try {
+      final result = await Process.run(
+        'powershell',
+        ['-NoProfile', '-Command', command.toString()],
+      );
+      if (result.exitCode != 0) return const {};
+      final raw = result.stdout.toString().trim();
+      if (raw.isEmpty) return const {};
+      final json = jsonDecode(raw);
+      if (json is! Map) return const {};
+      final values = <String, double>{};
+      for (final entry in json.entries) {
+        values[entry.key.toString()] = _asDouble(entry.value);
+      }
+      return values;
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  Map<String, List<String>> _loadMiscSubfolders(List<_DataEntry> dataEntries) {
+    final result = <String, List<String>>{};
+
+    for (final entry in dataEntries) {
+      GoServiceDefinitionMount? miscMount;
+      for (final mount in entry.mounts) {
+        if (mount.target.trim() == '/misc') {
+          miscMount = mount;
+          break;
+        }
+      }
+      if (miscMount == null) {
+        result[entry.rootPath] = const [];
+        continue;
+      }
+
+      final miscRoot = Directory(miscMount.source);
+      if (!miscRoot.existsSync()) {
+        result[entry.rootPath] = const [];
+        continue;
+      }
+
+      try {
+        final folders = miscRoot
+            .listSync(followLinks: false)
+            .whereType<Directory>()
+            .map((directory) => '/misc/${_folderLeafName(directory.path)}')
+            .toList()
+          ..sort();
+        result[entry.rootPath] = folders;
+      } catch (_) {
+        result[entry.rootPath] = const [];
+      }
+    }
+
+    return result;
   }
 
   Future<Map<String, double>> _loadServaStorageMetrics(List<GoServiceDefinition> definitions) async {
@@ -149,6 +327,42 @@ class _ServicesOverviewScreenState extends State<ServicesOverviewScreen> {
         return ListView(
           padding: const EdgeInsets.all(8),
           children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0D1526).withValues(alpha: 0.82),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Legacy mode',
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Show the older service-management tab when you need the full legacy workflow.',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.72),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Switch(
+                    value: widget.legacyModeEnabled,
+                    onChanged: widget.onLegacyModeChanged,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
             _ServicesPanel(
               services: services,
               liveMetrics: metrics?.liveMetrics ?? const {},
@@ -158,6 +372,13 @@ class _ServicesOverviewScreenState extends State<ServicesOverviewScreen> {
             if (inactiveDefinitions.isNotEmpty) ...[
               const SizedBox(height: 8),
               _InactiveServicesPanel(definitions: inactiveDefinitions),
+            ],
+            if ((metrics?.dataEntries ?? const <_DataEntry>[]).isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _DataPanel(
+                dataEntries: metrics?.dataEntries ?? const [],
+                onChanged: _refreshLocalMetrics,
+              ),
             ],
           ],
         );
@@ -489,20 +710,96 @@ class _InactiveServiceTile extends StatelessWidget {
   }
 
   Future<void> _confirmDelete(BuildContext context, MainBloc bloc) async {
-    final confirmed = await showDialog<bool>(
+    final choice = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete saved service?'),
-        content: Text('Delete the saved definition for "${definition.name}"?'),
+        content: Text(
+          'Choose whether to remove only the saved definition for "${definition.name}" or also delete its managed persistent data.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Delete')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          OutlinedButton(
+            onPressed: () => Navigator.of(context).pop('definition'),
+            child: const Text('Delete definition'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop('definition+data'),
+            child: const Text('Delete with data'),
+          ),
         ],
       ),
     );
-    if (confirmed == true && context.mounted) {
-      bloc.add(MainDeleteDefinitionRequested(id: definition.id));
+    if (choice != null && context.mounted) {
+      bloc.add(
+        MainDeleteDefinitionRequested(
+          id: definition.id,
+          deleteData: choice == 'definition+data',
+        ),
+      );
     }
+  }
+}
+
+class _DataPanel extends StatelessWidget {
+  const _DataPanel({
+    required this.dataEntries,
+    required this.onChanged,
+  });
+
+  final List<_DataEntry> dataEntries;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D1526).withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Data', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 2),
+          Text(
+            'Persistent folders managed by Serva. These can be reopened and potentially rebound later.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+            ),
+          ),
+          const SizedBox(height: 8),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+              final crossAxisCount = width >= 1400 ? 4 : width >= 1000 ? 3 : width >= 700 ? 2 : 1;
+              return GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: dataEntries.length,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: crossAxisCount == 1 ? 3.2 : crossAxisCount >= 3 ? 1.75 : 2.2,
+                ),
+                itemBuilder: (context, index) => _DataTile(
+                  entry: dataEntries[index],
+                  onChanged: onChanged,
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -541,6 +838,482 @@ class _ActionChip extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _DataTile extends StatelessWidget {
+  const _DataTile({
+    required this.entry,
+    required this.onChanged,
+  });
+
+  final _DataEntry entry;
+  final VoidCallback onChanged;
+
+  String? get _miscRoot {
+    for (final mount in entry.mounts) {
+      if (mount.type.trim().toLowerCase() == 'bind' && mount.target.trim() == '/misc') {
+        final source = mount.source.trim();
+        if (source.isNotEmpty) {
+          return source;
+        }
+      }
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final bloc = context.read<MainBloc>();
+    final statusColor = entry.isGlobalRoot
+        ? const Color(0xFF4CC9F0)
+        : entry.isOrphaned
+        ? const Color(0xFFFF7B72)
+        : entry.isDeployed
+            ? const Color(0xFF80ED99)
+            : const Color(0xFFFFC857);
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.035),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.folder_open_rounded, color: statusColor, size: 18),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      entry.serviceName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      entry.image,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.66),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _ServiceMeta(
+            label: 'Status',
+            value: entry.isGlobalRoot
+                ? 'Serva local'
+                : entry.isOrphaned
+                ? 'Orphaned data'
+                : entry.isDeployed
+                    ? 'Connected'
+                    : 'Saved only',
+          ),
+          const SizedBox(height: 8),
+          _ServiceMeta(label: 'Size', value: _formatBytes(entry.sizeBytes)),
+          const SizedBox(height: 8),
+          _ServiceMeta(label: 'Root folder', value: entry.rootPath),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              ...entry.mounts.map(
+                (mount) => Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.04),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    mount.target,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.78),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+              ...entry.miscSubfolders.map(
+                (folder) => Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4CC9F0).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: const Color(0xFF4CC9F0).withValues(alpha: 0.18)),
+                  ),
+                  child: Text(
+                    folder,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: const Color(0xFF9EDFF5),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const Spacer(),
+          if (_miscRoot != null) ...[
+            Row(
+              children: [
+                Expanded(
+                child: _CompactActionChip(
+                    label: 'New folder',
+                    icon: Icons.create_new_folder_rounded,
+                    color: const Color(0xFF80ED99),
+                    onTap: () => _createMiscSubfolder(context, bloc, _miscRoot!),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                child: _CompactActionChip(
+                    label: 'Delete folder',
+                    icon: Icons.folder_delete_rounded,
+                    color: const Color(0xFFFFC857),
+                    onTap: () => _deleteMiscSubfolder(context, bloc, _miscRoot!),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+          ],
+          Row(
+            children: [
+              Expanded(
+                child: _CompactActionChip(
+                  label: 'Open folder',
+                  icon: Icons.folder_open_rounded,
+                  color: const Color(0xFF4CC9F0),
+                  onTap: () => _openDirectory(context, entry.rootPath),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _CompactActionChip(
+                  label: 'Wipe',
+                  icon: Icons.cleaning_services_rounded,
+                  color: const Color(0xFFFFC857),
+                  onTap: () => _confirmWipe(context, bloc),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _CompactActionChip(
+                  label: 'Delete',
+                  icon: Icons.delete_forever_rounded,
+                  color: const Color(0xFFFF7B72),
+                  onTap: () => _confirmDelete(context, bloc),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmWipe(BuildContext context, MainBloc bloc) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Wipe data contents?'),
+        content: Text(
+          entry.isDeployed
+              ? 'This will delete everything inside "${entry.rootPath}" while keeping the folder itself. The connected service may break until it recreates its data.'
+              : 'This will delete everything inside "${entry.rootPath}" while keeping the folder itself.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Wipe data'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      final root = Directory(entry.rootPath);
+      if (root.existsSync()) {
+        _wipeDirectoryContents(root);
+      } else {
+        root.createSync(recursive: true);
+      }
+
+      if (entry.isGlobalRoot) {
+        TemplateGalleryScreen.resetLocalTemplateState();
+      }
+
+      onChanged();
+      final liveServiceId = _liveServiceIdForEntry(bloc);
+      if (liveServiceId != null) {
+        bloc.add(MainRestartRequested(id: liveServiceId));
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              liveServiceId != null
+                  ? 'Wiped data and restarted ${entry.serviceName}.'
+                  : 'Wiped data in ${entry.rootPath}.',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not wipe data: $error')),
+      );
+    }
+  }
+
+  Future<void> _createMiscSubfolder(
+    BuildContext context,
+    MainBloc bloc,
+    String miscRoot,
+  ) async {
+    final controller = TextEditingController();
+    final folderName = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Create misc folder'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Folder name',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+
+    if (folderName == null || folderName.isEmpty || !context.mounted) return;
+    if (folderName.contains('\\') || folderName.contains('/')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Folder name cannot contain slashes.')),
+      );
+      return;
+    }
+
+    try {
+      final folder = Directory('$miscRoot${Platform.pathSeparator}$folderName');
+      folder.createSync(recursive: true);
+      onChanged();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Created misc folder $folderName')),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not create misc folder: $error')),
+      );
+    }
+  }
+
+  Future<void> _deleteMiscSubfolder(
+    BuildContext context,
+    MainBloc bloc,
+    String miscRoot,
+  ) async {
+    final root = Directory(miscRoot);
+    final folders = root.existsSync()
+        ? (root
+              .listSync(followLinks: false)
+              .whereType<Directory>()
+              .map((directory) => directory.path)
+              .toList()
+          ..sort())
+        : <String>[];
+
+    if (folders.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No misc subfolders to delete.')),
+      );
+      return;
+    }
+
+    String? selected = folders.first;
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete misc folder'),
+        content: StatefulBuilder(
+          builder: (context, setDialogState) {
+            return DropdownButtonFormField<String>(
+              value: selected,
+              decoration: const InputDecoration(
+                labelText: 'Folder',
+                border: OutlineInputBorder(),
+              ),
+              items: folders
+                  .map(
+                    (path) => DropdownMenuItem<String>(
+                      value: path,
+                      child: Text(_folderLeafName(path)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                setDialogState(() {
+                  selected = value;
+                });
+              },
+            );
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(selected),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (choice == null || !context.mounted) return;
+
+    try {
+      final directory = Directory(choice);
+      if (directory.existsSync()) {
+        directory.deleteSync(recursive: true);
+      }
+
+      if (entry.isGlobalRoot) {
+        TemplateGalleryScreen.resetLocalTemplateState();
+      }
+      onChanged();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Deleted misc folder ${_folderLeafName(choice)}')),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not delete misc folder: $error')),
+      );
+    }
+  }
+
+  String? _liveServiceIdForEntry(MainBloc bloc) {
+    final state = bloc.state;
+    if (state is! MainLoaded) return null;
+
+    for (final service in state.services) {
+      if (service.name == entry.serviceName) {
+        return service.id;
+      }
+    }
+    return null;
+  }
+
+  void _wipeDirectoryContents(Directory directory) {
+    for (final entity in directory.listSync(followLinks: false)) {
+      if (entity is File) {
+        entity.deleteSync();
+        continue;
+      }
+
+      if (entity is Link) {
+        entity.deleteSync();
+        continue;
+      }
+
+      if (entity is Directory) {
+        _wipeDirectoryContents(entity);
+      }
+    }
+  }
+
+  Future<void> _confirmDelete(BuildContext context, MainBloc bloc) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete data folder?'),
+        content: Text(
+          entry.isDeployed
+              ? 'This will permanently delete "${entry.rootPath}" and all of its contents. The connected service may stop working until a new data folder is attached.'
+              : 'This will permanently delete "${entry.rootPath}" and all of its contents.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete folder'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      final root = Directory(entry.rootPath);
+      if (root.existsSync()) {
+        root.deleteSync(recursive: true);
+      }
+
+      if (entry.isGlobalRoot) {
+        TemplateGalleryScreen.resetLocalTemplateState();
+      }
+
+      onChanged();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Deleted data folder ${entry.rootPath}')),
+        );
+      }
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not delete data folder: $error')),
+      );
+    }
   }
 }
 
@@ -606,11 +1379,65 @@ class _ServicesMetrics {
     required this.liveMetrics,
     required this.serviceStorageBytes,
     required this.serviceMountRoots,
+    required this.dataEntries,
   });
 
   final Map<String, _ServiceLiveMetrics> liveMetrics;
   final Map<String, double> serviceStorageBytes;
   final Map<String, String> serviceMountRoots;
+  final List<_DataEntry> dataEntries;
+}
+
+class _DataEntry {
+  const _DataEntry({
+    required this.serviceId,
+    required this.serviceName,
+    required this.image,
+    required this.rootPath,
+    required this.isDeployed,
+    required this.mounts,
+    required this.isOrphaned,
+    required this.isGlobalRoot,
+    this.sizeBytes = 0,
+    this.miscSubfolders = const [],
+  });
+
+  final String serviceId;
+  final String serviceName;
+  final String image;
+  final String rootPath;
+  final bool isDeployed;
+  final List<GoServiceDefinitionMount> mounts;
+  final bool isOrphaned;
+  final bool isGlobalRoot;
+  final double sizeBytes;
+  final List<String> miscSubfolders;
+
+  _DataEntry copyWith({
+    String? serviceId,
+    String? serviceName,
+    String? image,
+    String? rootPath,
+    bool? isDeployed,
+    List<GoServiceDefinitionMount>? mounts,
+    bool? isOrphaned,
+    bool? isGlobalRoot,
+    double? sizeBytes,
+    List<String>? miscSubfolders,
+  }) {
+    return _DataEntry(
+      serviceId: serviceId ?? this.serviceId,
+      serviceName: serviceName ?? this.serviceName,
+      image: image ?? this.image,
+      rootPath: rootPath ?? this.rootPath,
+      isDeployed: isDeployed ?? this.isDeployed,
+      mounts: mounts ?? this.mounts,
+      isOrphaned: isOrphaned ?? this.isOrphaned,
+      isGlobalRoot: isGlobalRoot ?? this.isGlobalRoot,
+      sizeBytes: sizeBytes ?? this.sizeBytes,
+      miscSubfolders: miscSubfolders ?? this.miscSubfolders,
+    );
+  }
 }
 
 class _ServiceLiveMetrics {
@@ -706,6 +1533,10 @@ String _servaManagedBasePath() {
   return 'Documents${Platform.pathSeparator}Serva';
 }
 
+String _servaLocalDataPath() {
+  return '${_servaManagedBasePath()}${Platform.pathSeparator}serva-local';
+}
+
 String? _serviceMountRootFromDefinition(GoServiceDefinition definition) {
   if (definition.mounts.isEmpty) return null;
   final first = definition.mounts.first.source.trim();
@@ -713,7 +1544,25 @@ String? _serviceMountRootFromDefinition(GoServiceDefinition definition) {
   return Directory(first).parent.path;
 }
 
+String? _dataRootFromDefinition(GoServiceDefinition definition) {
+  final managedBindMounts = definition.mounts
+      .where((mount) => mount.managed && mount.type.trim().toLowerCase() == 'bind')
+      .toList();
+  if (managedBindMounts.isEmpty) return null;
+
+  final first = managedBindMounts.first.source.trim();
+  if (first.isEmpty) return null;
+
+  return Directory(first).parent.path;
+}
+
 String _psEscape(String value) => value.replaceAll("'", "''");
+
+String _folderLeafName(String path) {
+  final normalized = path.replaceAll('/', '\\');
+  final segments = normalized.split('\\').where((segment) => segment.trim().isNotEmpty).toList();
+  return segments.isEmpty ? path : segments.last;
+}
 
 Future<void> _openUrl(BuildContext context, String url) async {
   final trimmed = url.trim();
