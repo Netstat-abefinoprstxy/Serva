@@ -6,6 +6,7 @@ bool _isVerifiedTemplate(_TemplateCardModel template) {
       template.name == 'jellyfin' ||
       template.name == 'nextcloud' ||
       template.name == 'element' ||
+      template.name == 'tailscale' ||
       template.name == 'focalboard' ||
       template.name == 'sovereignd-test';
 }

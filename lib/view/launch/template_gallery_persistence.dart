@@ -70,6 +70,7 @@ extension _TemplateGalleryPersistence on _TemplateGalleryScreenState {
 }
 
 void _registerCustomTemplate(_TemplateCardModel template) {
+  template = _normalizeTemplateDefaults(template);
   final current = List<_TemplateCardModel>.from(TemplateGalleryScreen.customTemplates.value);
   final key = _templateKey(template);
   final existingIndex = current.indexWhere((entry) => _templateKey(entry) == key);

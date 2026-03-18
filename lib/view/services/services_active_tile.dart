@@ -67,6 +67,12 @@ class _ActiveServiceTile extends StatelessWidget {
             runSpacing: 6,
             children: [
               _ActionChip(label: service.localUrl.trim().isNotEmpty ? 'Open' : 'Manage', icon: service.localUrl.trim().isNotEmpty ? Icons.open_in_new_rounded : Icons.tune_rounded, onTap: () { if (service.localUrl.trim().isNotEmpty) _openUrl(context, service.localUrl); }),
+              if (isTailscaleService(service))
+                _ActionChip(
+                  label: 'Auth',
+                  icon: Icons.login_rounded,
+                  onTap: () => openTailscaleAuthFlow(context, service),
+                ),
               _ActionChip(label: 'Details', icon: Icons.tune_rounded, onTap: () => showServiceDetailsSheet(context, service)),
               _ActionChip(label: _isRunning ? 'Pause' : 'Start', icon: _isRunning ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded, onTap: () => bloc.add(_isRunning ? MainStopRequested(id: service.id) : MainStartRequested(id: service.id))),
               _ActionChip(label: 'Restart', icon: Icons.restart_alt_rounded, onTap: () => bloc.add(MainRestartRequested(id: service.id))),

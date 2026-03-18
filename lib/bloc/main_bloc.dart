@@ -1,6 +1,8 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:serva/app_feedback.dart';
 import 'package:serva/api/go_models.dart';
 import 'package:serva/api/sovereign_api.dart';
+import 'package:serva/tailscale_auth.dart';
 
 import 'main_event.dart';
 import 'main_state.dart';
@@ -17,6 +19,7 @@ class MainBloc extends Bloc<MainEvent, MainState> {
     on<MainRecreateRequested>(_onRecreate);
     on<MainDeleteDefinitionRequested>(_onDeleteDefinition);
     on<MainExposeLanRequested>(_onExposeLan);
+    on<MainTailscaleAuthLinkDetected>(_onTailscaleAuthLinkDetected);
 
     add(const MainLoadRequested());
   }
@@ -114,21 +117,58 @@ class MainBloc extends Bloc<MainEvent, MainState> {
   }
 
   Future<void> _onCreateService(MainCreateServiceRequested event, Emitter<MainState> emit) async {
-    await _runAction(
-      emit,
-      loadingMessage: 'Creating service...',
-      action: () async {
-        await _api.createService(
-          name: event.name,
-          image: event.image,
-          containerPort: event.containerPort,
-          mounts: event.mounts,
-          env: event.env,
-        );
-      },
-      successMessage: 'Created ${event.name}.',
-      failurePrefix: 'Create failed',
+    print(
+      '[launch-debug] bloc create name=${event.name} image=${event.image} '
+      'port=${event.containerPort} mounts=${event.mounts.length} env=${event.env.length}',
     );
+    final previous = state;
+    if (previous is! MainLoaded) {
+      emit(const MainLoading(message: 'Creating service...'));
+    }
+
+    try {
+      final created = await _api.createService(
+        name: event.name,
+        image: event.image,
+        containerPort: event.containerPort,
+        mounts: event.mounts,
+        env: event.env,
+      );
+
+      final snapshot = await _fetchSnapshot();
+      emit(
+        _loadedFromSnapshot(
+          snapshot,
+          lastMessage: 'Created ${event.name}.',
+        ),
+      );
+
+      final isTailscale = event.image.trim().toLowerCase().contains('tailscale');
+      if (isTailscale && created != null) {
+        print('[tailscale-auth] created tailscale service id=${created.id}');
+        await Future<void>.delayed(const Duration(seconds: 2));
+        final logs = await _api.serviceLogs(created.id);
+        final authUrl = extractTailscaleAuthUrlFromLogs(logs.logs);
+        print('[tailscale-auth] create-flow authUrl=${authUrl ?? 'null'}');
+        if (authUrl != null && authUrl.isNotEmpty) {
+          add(MainTailscaleAuthLinkDetected(url: authUrl));
+        }
+      }
+    } catch (e) {
+      if (previous is MainLoaded) {
+        emit(
+          MainLoaded(
+            services: previous.services,
+            definitions: previous.definitions,
+            healthOk: previous.healthOk,
+            lastMessage: 'Create failed: $e',
+          ),
+        );
+        return;
+      }
+
+      emit(MainError(message: e.toString()));
+    }
   }
 
   Future<void> _onStart(MainStartRequested event, Emitter<MainState> emit) async {
@@ -213,6 +253,14 @@ class MainBloc extends Bloc<MainEvent, MainState> {
       successMessage: event.enabled ? 'Service exposed to LAN.' : 'LAN exposure disabled.',
       failurePrefix: 'Expose to LAN failed',
     );
+  }
+
+  Future<void> _onTailscaleAuthLinkDetected(
+    MainTailscaleAuthLinkDetected event,
+    Emitter<MainState> emit,
+  ) async {
+    print('[tailscale-auth] bloc event received url=${event.url}');
+    await showGlobalTailscaleAuthSnackBar(event.url);
   }
 }
 

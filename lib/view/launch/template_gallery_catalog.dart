@@ -124,6 +124,24 @@ const List<_TemplateCardModel> _templateCatalog = [
     env: ['WHOOGLE_HTTP2=0'],
   ),
   _TemplateCardModel(
+    label: 'Tailscale',
+    subtitle: 'Network Utility',
+    description:
+        'Join your tailnet from a container and tune subnet-router or exit-node flags through template settings. This is primarily a background service, not a local web app.',
+    comparableTo: ['ZeroTier', 'Hamachi'],
+    name: 'tailscale',
+    image: 'tailscale/tailscale:stable',
+    port: 80,
+    icon: Icons.vpn_key_outlined,
+    accent: Color(0xFF6EA8FE),
+    env: [
+      'TS_STATE_DIR=/var/lib/tailscale',
+      'TS_USERSPACE=true',
+      'TS_EXTRA_ARGS=--advertise-routes=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16 --advertise-exit-node',
+    ],
+    mountTargets: ['/var/lib/tailscale'],
+  ),
+  _TemplateCardModel(
     label: 'Element',
     subtitle: 'Chat Client',
     description: 'Matrix web client with a dedicated config mount instead of the generic data layout.',

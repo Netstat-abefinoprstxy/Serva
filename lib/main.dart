@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 
+import 'app_feedback.dart';
 import 'view/homepage.dart';
 
 Process? _backendProcess;
@@ -66,6 +67,7 @@ class ServaApp extends StatelessWidget {
     return MaterialApp(
       title: 'Serva',
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: rootScaffoldMessengerKey,
       themeMode: ThemeMode.dark,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),

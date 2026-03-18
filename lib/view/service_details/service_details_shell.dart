@@ -28,6 +28,8 @@ class _ServiceDetailsSheetState extends State<_ServiceDetailsSheet> {
   final ServaApi _api = ServaApi();
 
   late Future<_ServiceDetailsData> _future;
+  _ServiceDetailsData? _latestData;
+  String? _lastAuthUrlShown;
 
   bool get _isRunning => widget.service.state.toLowerCase() == 'running';
 
@@ -41,7 +43,10 @@ class _ServiceDetailsSheetState extends State<_ServiceDetailsSheet> {
     final inspect = await _api.serviceInspect(widget.service.id);
     final stats = await _api.serviceStats(widget.service.id);
     final logs = await _api.serviceLogs(widget.service.id);
-    return _ServiceDetailsData(inspect: inspect, stats: stats, logs: logs);
+    final data = _ServiceDetailsData(inspect: inspect, stats: stats, logs: logs);
+    _latestData = data;
+    print('[tailscale-auth] details loaded service=${widget.service.name}');
+    return data;
   }
 
   void _refresh() {
@@ -119,6 +124,20 @@ class _ServiceDetailsSheetState extends State<_ServiceDetailsSheet> {
                     message: 'No details available.',
                     onRetry: _refresh,
                   );
+                }
+
+                final authUrl = _tailscaleAuthUrl(data);
+                print(
+                  '[tailscale-auth] details builder service=${widget.service.name} '
+                  'isTailscale=${isTailscaleService(widget.service)} authUrl=${authUrl ?? 'null'} '
+                  'lastShown=${_lastAuthUrlShown ?? 'null'}',
+                );
+                if (authUrl != null &&
+                    authUrl.isNotEmpty &&
+                    authUrl != _lastAuthUrlShown) {
+                  _lastAuthUrlShown = authUrl;
+                  print('[tailscale-auth] dispatching auth event url=$authUrl');
+                  widget.bloc.add(MainTailscaleAuthLinkDetected(url: authUrl));
                 }
 
                 return ListView(children: _buildDetailSections(context, data));

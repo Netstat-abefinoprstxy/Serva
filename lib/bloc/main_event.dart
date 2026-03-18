@@ -73,3 +73,9 @@ class MainExposeLanRequested extends MainEvent {
   final String id;
   final bool enabled;
 }
+
+class MainTailscaleAuthLinkDetected extends MainEvent {
+  const MainTailscaleAuthLinkDetected({required this.url});
+
+  final String url;
+}

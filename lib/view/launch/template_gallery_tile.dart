@@ -164,12 +164,21 @@ class _TemplateTile extends StatelessWidget {
   }
 
   Future<void> _createFromTemplate(BuildContext context, _TemplateCardModel template) async {
+    print('[launch-debug] tapped template label=${template.label} image=${template.image}');
     final bloc = context.read<MainBloc>();
     final launchConfig = await _showTemplateLaunchFlow(context, template);
-    if (launchConfig == null || !context.mounted) return;
+    if (launchConfig == null || !context.mounted) {
+      print('[launch-debug] launch flow cancelled label=${template.label}');
+      return;
+    }
+    print(
+      '[launch-debug] launch flow confirmed name=${launchConfig.serviceName} '
+      'mounts=${launchConfig.mounts.length} env=${launchConfig.env.length}',
+    );
     await _prepareTemplateFiles(template, launchConfig);
     if (!context.mounted) return;
 
+    print('[launch-debug] dispatching create service name=${launchConfig.serviceName}');
     bloc.add(
       MainCreateServiceRequested(
         name: launchConfig.serviceName,

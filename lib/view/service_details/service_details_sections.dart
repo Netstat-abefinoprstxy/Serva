@@ -2,6 +2,8 @@ part of '../service_details_sheet.dart';
 
 extension _ServiceDetailsSections on _ServiceDetailsSheetState {
   Widget _buildActionBar() {
+    final data = _latestData;
+    final tailscaleAuthUrl = data == null ? null : _tailscaleAuthUrl(data);
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -17,6 +19,12 @@ extension _ServiceDetailsSections on _ServiceDetailsSheetState {
             onPressed: () => _openUrl(context, widget.service.lanUrl),
             icon: const Icon(Icons.wifi),
             label: const Text('Open LAN'),
+          ),
+        if (tailscaleAuthUrl != null)
+          FilledButton.tonalIcon(
+            onPressed: () => _openUrl(context, tailscaleAuthUrl),
+            icon: const Icon(Icons.login),
+            label: const Text('Authenticate'),
           ),
         FilledButton.tonalIcon(
           onPressed: () {
@@ -56,6 +64,7 @@ extension _ServiceDetailsSections on _ServiceDetailsSheetState {
   }
 
   List<Widget> _buildDetailSections(BuildContext context, _ServiceDetailsData data) {
+    final tailscaleAuthUrl = _tailscaleAuthUrl(data);
     return [
       _DetailSection(
         title: 'Overview',
@@ -69,6 +78,16 @@ extension _ServiceDetailsSections on _ServiceDetailsSheetState {
             _DetailRow(label: 'Path', value: data.inspect.path),
             if (data.inspect.localUrl.trim().isNotEmpty) _DetailRow(label: 'Local URL', value: data.inspect.localUrl),
             if (data.inspect.lanUrl.trim().isNotEmpty) _DetailRow(label: 'LAN URL', value: data.inspect.lanUrl),
+            if (tailscaleAuthUrl != null)
+              _DetailRow(
+                label: 'Auth URL',
+                value: tailscaleAuthUrl,
+                trailing: IconButton(
+                  tooltip: 'Open auth URL',
+                  onPressed: () => _openUrl(context, tailscaleAuthUrl),
+                  icon: const Icon(Icons.open_in_new),
+                ),
+              ),
           ],
         ),
       ),

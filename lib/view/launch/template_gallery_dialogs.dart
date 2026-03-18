@@ -230,6 +230,8 @@ Future<void> _showCreateTemplateSheet(
   final descriptionController = TextEditingController(text: existingTemplate?.description ?? '');
   final comparisonController = TextEditingController();
   final mountController = TextEditingController(text: '/data');
+  final envController = TextEditingController();
+  final subnetController = TextEditingController();
   final filePathController = TextEditingController();
   final fileDescriptionController = TextEditingController();
   final fileContentsController = TextEditingController();
@@ -239,7 +241,13 @@ Future<void> _showCreateTemplateSheet(
         : const ['/data'],
   );
   final comparisonTags = List<String>.from(existingTemplate?.comparableTo ?? const []);
+  final envEntries = List<String>.from(existingTemplate?.env ?? const []);
   final customFiles = List<_TemplateSeedFile>.from(existingTemplate?.seedFiles ?? const []);
+  final initialExtraArgs = _envValue(envEntries, 'TS_EXTRA_ARGS') ?? '';
+  final initialRoutes = _extractAdvertisedRoutes(initialExtraArgs);
+  var advertiseAllSubnets = _isAllPrivateSubnetSet(initialRoutes);
+  subnetController.text = advertiseAllSubnets ? '' : initialRoutes;
+  var advertiseExitNode = _containsExitNodeFlag(initialExtraArgs);
 
   try {
     await showModalBottomSheet<void>(
@@ -249,6 +257,12 @@ Future<void> _showCreateTemplateSheet(
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
+            bool isTailscaleDraft() {
+              final image = imageController.text.trim().toLowerCase();
+              final baseName = baseNameController.text.trim().toLowerCase();
+              return image.contains('tailscale') || baseName == 'tailscale';
+            }
+
             void addMountTarget() {
               final normalized = _normalizeMountTarget(mountController.text);
               if (normalized.isEmpty || normalized == '/misc' || mountTargets.contains(normalized)) return;
@@ -265,6 +279,30 @@ Future<void> _showCreateTemplateSheet(
               setSheetState(() {
                 comparisonTags.add(value);
                 comparisonController.clear();
+              });
+            }
+
+            void syncTailscaleEnv() {
+              envEntries.removeWhere((entry) => entry.startsWith('TS_EXTRA_ARGS='));
+              final args = <String>[];
+              final routes = advertiseAllSubnets
+                  ? _allPrivateSubnetRoutes
+                  : subnetController.text.trim();
+              if (routes.isNotEmpty) {
+                args.add('--advertise-routes=$routes');
+              }
+              if (advertiseExitNode) {
+                args.add('--advertise-exit-node');
+              }
+              envEntries.add('TS_EXTRA_ARGS=${args.join(' ')}');
+            }
+
+            void addEnvEntry() {
+              final value = envController.text.trim();
+              if (value.isEmpty || !value.contains('=') || envEntries.contains(value)) return;
+              setSheetState(() {
+                envEntries.add(value);
+                envController.clear();
               });
             }
 
@@ -325,11 +363,11 @@ Future<void> _showCreateTemplateSheet(
                           border: const OutlineInputBorder(),
                           suffixIcon: IconButton(
                             tooltip: 'Paste image',
-                            onPressed: () async {
-                              final data = await Clipboard.getData(Clipboard.kTextPlain);
-                              final parsed = _extractImageFromPaste(data?.text ?? '') ?? (data?.text ?? '').trim();
-                              if (parsed.isEmpty) return;
-                              setSheetState(() {
+                              onPressed: () async {
+                                final data = await Clipboard.getData(Clipboard.kTextPlain);
+                                final parsed = _extractImageFromPaste(data?.text ?? '') ?? (data?.text ?? '').trim();
+                                if (parsed.isEmpty) return;
+                                setSheetState(() {
                                 imageController.text = parsed;
                                 if (labelController.text.trim().isEmpty) {
                                   labelController.text = _titleFromImage(parsed);
@@ -339,6 +377,20 @@ Future<void> _showCreateTemplateSheet(
                                 }
                                 if (descriptionController.text.trim().isEmpty) {
                                   descriptionController.text = parsed;
+                                }
+                                if (parsed.toLowerCase().contains('tailscale')) {
+                                  if (!mountTargets.contains('/var/lib/tailscale')) {
+                                    mountTargets
+                                      ..clear()
+                                      ..add('/var/lib/tailscale');
+                                  }
+                                  if (_envValue(envEntries, 'TS_STATE_DIR') == null) {
+                                    envEntries.add('TS_STATE_DIR=/var/lib/tailscale');
+                                  }
+                                  if (_envValue(envEntries, 'TS_USERSPACE') == null) {
+                                    envEntries.add('TS_USERSPACE=true');
+                                  }
+                                  syncTailscaleEnv();
                                 }
                               });
                             },
@@ -494,6 +546,104 @@ Future<void> _showCreateTemplateSheet(
                           ),
                         ],
                       ),
+                      if (isTailscaleDraft()) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          'Tailscale routing',
+                          style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: subnetController,
+                          enabled: !advertiseAllSubnets,
+                          decoration: const InputDecoration(
+                            labelText: 'Advertised subnet routes',
+                            hintText: '192.168.1.0/24',
+                            helperText: 'Comma-separate multiple routes if needed.',
+                            border: OutlineInputBorder(),
+                          ),
+                          onChanged: (_) {
+                            setSheetState(syncTailscaleEnv);
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                        SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Advertise all private subnets'),
+                          subtitle: Text(
+                            _allPrivateSubnetRoutes,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
+                            ),
+                          ),
+                          value: advertiseAllSubnets,
+                          onChanged: (value) {
+                            setSheetState(() {
+                              advertiseAllSubnets = value;
+                              syncTailscaleEnv();
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                        SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Advertise as exit node'),
+                          subtitle: const Text(
+                            'Lets other Tailscale devices route internet traffic through this node.',
+                          ),
+                          value: advertiseExitNode,
+                          onChanged: (value) {
+                            setSheetState(() {
+                              advertiseExitNode = value;
+                              syncTailscaleEnv();
+                            });
+                          },
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      Text(
+                        'Environment',
+                        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 6),
+                      if (envEntries.isNotEmpty)
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: envEntries
+                              .map(
+                                (entry) => InputChip(
+                                  label: Text(entry),
+                                  onDeleted: () {
+                                    setSheetState(() {
+                                      envEntries.remove(entry);
+                                    });
+                                  },
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      if (envEntries.isNotEmpty) const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: envController,
+                              decoration: const InputDecoration(
+                                labelText: 'Add env var',
+                                hintText: 'TS_EXTRA_ARGS=--advertise-routes=192.168.1.0/24',
+                                border: OutlineInputBorder(),
+                              ),
+                              onSubmitted: (_) => addEnvEntry(),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          FilledButton.tonal(
+                            onPressed: addEnvEntry,
+                            child: const Text('Add'),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 12),
                       Text(
                         'Custom files',
@@ -603,11 +753,15 @@ Future<void> _showCreateTemplateSheet(
                               final description = descriptionController.text.trim();
                               final port = int.tryParse(portController.text.trim()) ?? 80;
 
-                              if (image.isEmpty || label.isEmpty || baseName.isEmpty) {
+                                if (image.isEmpty || label.isEmpty || baseName.isEmpty) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(content: Text('Image, label, and base name are required.')),
                                 );
                                 return;
+                              }
+
+                              if (isTailscaleDraft()) {
+                                syncTailscaleEnv();
                               }
 
                               final template = _TemplateCardModel(
@@ -620,7 +774,7 @@ Future<void> _showCreateTemplateSheet(
                                 port: port <= 0 ? 80 : port,
                                 icon: Icons.auto_awesome_motion_rounded,
                                 accent: const Color(0xFFA0C4FF),
-                                env: const [],
+                                env: List<String>.from(envEntries),
                                 seedFiles: List<_TemplateSeedFile>.from(customFiles),
                                 mountTargets: [...mountTargets, '/misc'],
                               );
@@ -657,6 +811,8 @@ Future<void> _showCreateTemplateSheet(
     descriptionController.dispose();
     comparisonController.dispose();
     mountController.dispose();
+    envController.dispose();
+    subnetController.dispose();
     filePathController.dispose();
     fileDescriptionController.dispose();
     fileContentsController.dispose();
@@ -851,4 +1007,45 @@ Future<_TemplateLaunchConfig?> _showLaunchFlowSheet(
 
   nameController.dispose();
   return result;
+}
+
+String? _envValue(List<String> envEntries, String key) {
+  for (final entry in envEntries) {
+    final prefix = '$key=';
+    if (entry.startsWith(prefix)) {
+      return entry.substring(prefix.length);
+    }
+  }
+  return null;
+}
+
+String _extractAdvertisedRoutes(String extraArgs) {
+  final match = RegExp(r'--advertise-routes=([^\s]+)').firstMatch(extraArgs);
+  return match?.group(1) ?? '';
+}
+
+bool _containsExitNodeFlag(String extraArgs) {
+  return extraArgs.split(RegExp(r'\s+')).contains('--advertise-exit-node');
+}
+
+const String _allPrivateSubnetRoutes = '10.0.0.0/8,172.16.0.0/12,192.168.0.0/16';
+
+bool _isAllPrivateSubnetSet(String routes) {
+  final normalized = routes
+      .split(',')
+      .map((route) => route.trim())
+      .where((route) => route.isNotEmpty)
+      .toList()
+    ..sort();
+  final expected = _allPrivateSubnetRoutes
+      .split(',')
+      .map((route) => route.trim())
+      .where((route) => route.isNotEmpty)
+      .toList()
+    ..sort();
+  if (normalized.length != expected.length) return false;
+  for (var i = 0; i < normalized.length; i++) {
+    if (normalized[i] != expected[i]) return false;
+  }
+  return true;
 }

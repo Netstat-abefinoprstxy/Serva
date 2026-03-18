@@ -115,6 +115,55 @@ class _ServiceDetailsData {
   final GoLogsResponse logs;
 }
 
+bool isTailscaleService(GoService service) =>
+    service.image.trim().toLowerCase().contains('tailscale');
+
+Future<String?> fetchTailscaleAuthUrlForService(String serviceId) async {
+  final api = ServaApi();
+  final logs = await api.serviceLogs(serviceId);
+  return extractTailscaleAuthUrlFromLogs(logs.logs);
+}
+
+void showTailscaleAuthSnackBar(BuildContext context, String url) {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  if (messenger == null) return;
+
+  messenger.hideCurrentSnackBar();
+  messenger.showSnackBar(
+    SnackBar(
+      duration: const Duration(seconds: 10),
+      behavior: SnackBarBehavior.floating,
+      content: Text(
+        url,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      action: SnackBarAction(
+        label: 'Open',
+        onPressed: () {
+          _openUrl(context, url);
+        },
+      ),
+    ),
+  );
+}
+
+Future<void> openTailscaleAuthFlow(BuildContext context, GoService service) async {
+  final authUrl = await fetchTailscaleAuthUrlForService(service.id);
+  if (!context.mounted) return;
+  if (authUrl == null || authUrl.trim().isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('No Tailscale auth link was found in the latest logs.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    return;
+  }
+
+  await _openUrl(context, authUrl);
+}
+
 Future<void> _openUrl(BuildContext context, String url) async {
   final trimmed = url.trim();
   if (trimmed.isEmpty) return;
@@ -179,4 +228,10 @@ String _sumNestedMapField(dynamic raw, String field) {
 
   if (!found) return 'n/a';
   return total % 1 == 0 ? total.toInt().toString() : total.toStringAsFixed(2);
+}
+
+String? _tailscaleAuthUrl(_ServiceDetailsData data) {
+  final image = data.inspect.image.trim().toLowerCase();
+  if (!image.contains('tailscale')) return null;
+  return extractTailscaleAuthUrlFromLogs(data.logs.logs);
 }

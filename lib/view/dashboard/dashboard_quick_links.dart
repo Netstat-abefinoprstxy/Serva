@@ -15,6 +15,7 @@ class _QuickLinksPanel extends StatelessWidget {
     final linkedServices = services
         .where(
           (service) =>
+              isTailscaleService(service) ||
               service.localUrl.trim().isNotEmpty ||
               service.lanUrl.trim().isNotEmpty,
         )
@@ -132,6 +133,13 @@ class _QuickLinkTile extends StatelessWidget {
               label: 'Local',
               icon: Icons.open_in_new_rounded,
               onTap: () => _openUrl(context, service.localUrl),
+            ),
+          if (hasLocal && isTailscaleService(service)) SizedBox(width: 4 * scale),
+          if (isTailscaleService(service))
+            _MiniLinkChip(
+              label: 'Auth',
+              icon: Icons.login_rounded,
+              onTap: () => openTailscaleAuthFlow(context, service),
             ),
           if (hasLocal && hasLan) SizedBox(width: 4 * scale),
           if (hasLan)

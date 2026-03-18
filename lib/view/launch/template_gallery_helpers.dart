@@ -76,7 +76,7 @@ String _suggestNameFromImage(String image) {
 }
 
 _TemplateCardModel _customTemplateFromImage(String image) {
-  return _TemplateCardModel(
+  final template = _TemplateCardModel(
     label: _titleFromImage(image),
     subtitle: 'Pasted Image',
     description: image,
@@ -89,6 +89,7 @@ _TemplateCardModel _customTemplateFromImage(String image) {
     seedFiles: const [],
     mountTargets: const ['/data', '/misc'],
   );
+  return _normalizeTemplateDefaults(template);
 }
 
 _TemplateCardModel _customTemplateFromStorageMap(Map<String, dynamic> json) {
@@ -115,7 +116,7 @@ _TemplateCardModel _customTemplateFromStorageMap(Map<String, dynamic> json) {
   final portValue = json['port'];
   final port = portValue is num ? portValue.toInt() : int.tryParse('$portValue') ?? 80;
 
-  return _TemplateCardModel(
+  final template = _TemplateCardModel(
     label: label.isEmpty ? _titleFromImage(image) : label,
     subtitle: subtitle.isEmpty ? 'Custom Template' : subtitle,
     description: description.isEmpty ? image : description,
@@ -129,9 +130,11 @@ _TemplateCardModel _customTemplateFromStorageMap(Map<String, dynamic> json) {
     seedFiles: seedFiles,
     mountTargets: mountTargets.isEmpty ? const ['/data', '/misc'] : mountTargets,
   );
+  return _normalizeTemplateDefaults(template);
 }
 
 Map<String, dynamic> _customTemplateToStorageMap(_TemplateCardModel template) {
+  template = _normalizeTemplateDefaults(template);
   return {
     'label': template.label,
     'subtitle': template.subtitle,
@@ -153,6 +156,48 @@ Map<String, dynamic> _customTemplateToStorageMap(_TemplateCardModel template) {
         )
         .toList(),
   };
+}
+
+_TemplateCardModel _normalizeTemplateDefaults(_TemplateCardModel template) {
+  if (_templateKey(template) != 'tailscale/tailscale:stable') {
+    return template;
+  }
+
+  final env = List<String>.from(template.env);
+  void upsertEnv(String key, String value) {
+    env.removeWhere((entry) => entry.startsWith('$key='));
+    env.add('$key=$value');
+  }
+
+  upsertEnv('TS_STATE_DIR', '/var/lib/tailscale');
+  upsertEnv('TS_USERSPACE', 'true');
+  upsertEnv(
+    'TS_EXTRA_ARGS',
+    '--advertise-routes=$_allPrivateSubnetRoutes --advertise-exit-node',
+  );
+
+  final mountTargets = _mountTargetsForTemplateCard(template);
+  if (!mountTargets.contains('/var/lib/tailscale')) {
+    mountTargets.add('/var/lib/tailscale');
+  }
+  if (!mountTargets.contains('/misc')) {
+    mountTargets.add('/misc');
+  }
+
+  return _TemplateCardModel(
+    label: template.label,
+    subtitle: template.subtitle,
+    description: template.description,
+    comparableTo: template.comparableTo,
+    name: template.name,
+    image: template.image,
+    port: template.port,
+    icon: template.icon,
+    accent: template.accent,
+    env: env,
+    seedFiles: template.seedFiles,
+    mountTargets: mountTargets,
+  );
 }
 
 List<_TemplateCardModel> _mergeTemplateLists(

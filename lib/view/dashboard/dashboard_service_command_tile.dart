@@ -106,6 +106,12 @@ class _ServiceCommandTile extends StatelessWidget {
                   }
                 },
               ),
+              if (isTailscaleService(service))
+                _ActionChip(
+                  label: 'Auth',
+                  icon: Icons.login_rounded,
+                  onTap: () => openTailscaleAuthFlow(context, service),
+                ),
               _ActionChip(
                 label: 'Details',
                 icon: Icons.tune_rounded,
