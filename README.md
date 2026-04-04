@@ -83,7 +83,7 @@ This is where Serva becomes more than a container launcher. It treats data as a 
 ### Launch
 
 The Launch screen is the one-click app gallery.
-<img width="2206" height="1045" alt="Services" src="https://github.com/user-attachments/assets/62497853-e90b-4db1-b5cb-9ff4732506ad" />
+<img width="2200" height="1047" alt="Launch" src="https://github.com/user-attachments/assets/2996a35c-27aa-4142-ae8f-151def9dc667" />
 
 It includes:
 
