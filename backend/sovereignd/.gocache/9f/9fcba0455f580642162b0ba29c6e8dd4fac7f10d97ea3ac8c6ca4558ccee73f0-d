@@ -1,6 +1,0 @@
-./app.go
-./docker.go
-./handlers.go
-./http.go
-./models.go
-./network.go

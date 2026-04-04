@@ -43,3 +43,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Monorepo backend artifacts
+/backend/sovereignd/.gocache/
+/backend/sovereignd/.git-backup-sovereignd/
+/backend/sovereignd/sovereignd.exe
+/.gocache/
