@@ -67,18 +67,12 @@ double _cpuPercentFromStats(Map<String, dynamic> raw) {
 
   final cpuDelta = currentTotal - previousTotal;
   final systemDelta = currentSystem - previousSystem;
-  final onlineCpus = _asDouble(cpuStats['online_cpus']);
-  final cores = onlineCpus > 0
-      ? onlineCpus
-      : (_listValue(cpuUsage['percpu_usage']).isNotEmpty
-            ? _listValue(cpuUsage['percpu_usage']).length.toDouble()
-            : 1);
 
   if (cpuDelta <= 0 || systemDelta <= 0) {
     return 0;
   }
 
-  return (cpuDelta / systemDelta) * cores * 100;
+  return ((cpuDelta / systemDelta) * 100).clamp(0, 100).toDouble();
 }
 
 double _memoryUsageBytesFromStats(Map<String, dynamic> raw) {

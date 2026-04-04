@@ -200,28 +200,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         '${metrics?.containerCpuPercent.toStringAsFixed(1) ?? '0.0'}%',
                     caption: liveStatsCount == 0
                         ? 'No live container CPU data yet'
-                        : 'Aggregate CPU across active services',
+                        : 'Share of total host CPU used by Serva containers',
                     color: const Color(0xFF4CC9F0),
                     icon: Icons.memory_rounded,
                     series: cpuSeries,
                     graphTick: _graphTick,
                     scale: uiScale,
                     footer:
-                        'Host load context: ${metrics?.hostCpuPercent.toStringAsFixed(1) ?? '0.0'}%',
+                        'Whole PC: ${metrics?.hostCpuPercent.toStringAsFixed(1) ?? '0.0'}%',
                   ),
                   _StatCard(
                     label: 'Serva Memory',
                     value: _formatBytes(metrics?.containerMemoryBytes ?? 0),
                     caption: liveStatsCount == 0
                         ? 'No live container memory data yet'
-                        : 'Total memory used by active services',
+                        : 'Physical memory used by Serva containers',
                     color: const Color(0xFF80ED99),
                     icon: Icons.stacked_line_chart_rounded,
                     series: memorySeries,
                     graphTick: _graphTick,
                     scale: uiScale,
                     footer:
-                        'Host memory context: ${_formatBytes(metrics?.hostMemoryUsedBytes ?? 0)} / ${_formatBytes(metrics?.hostMemoryTotalBytes ?? 0)}',
+                        'Whole PC: ${_formatBytes(metrics?.hostMemoryUsedBytes ?? 0)} / ${_formatBytes(metrics?.hostMemoryTotalBytes ?? 0)}',
                   ),
                   _StatCard(
                     label: 'Serva Network',
@@ -244,14 +244,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _StatCard(
                     label: 'Serva Storage',
                     value: _formatBytes(metrics?.servaStorageUsedBytes ?? 0),
-                    caption: 'Serva data stored under Documents\\Serva',
+                    caption: 'Disk space used by Serva-managed data',
                     color: const Color(0xFFFF7B72),
                     icon: Icons.storage_rounded,
                     series: storageSeries,
                     graphTick: _graphTick,
                     scale: uiScale,
                     footer:
-                        'Drive usage: ${_formatBytes(metrics?.hostStorageUsedBytes ?? 0)} / ${_formatBytes(metrics?.hostStorageTotalBytes ?? 0)}',
+                        'Whole drive: ${_formatBytes(metrics?.hostStorageUsedBytes ?? 0)} / ${_formatBytes(metrics?.hostStorageTotalBytes ?? 0)}',
                   ),
                 ],
               );
