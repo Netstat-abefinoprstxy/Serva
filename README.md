@@ -26,6 +26,7 @@ Serva is organized around a few core screens that cover the main self-hosting wo
 ### Dashboard
 
 The Dashboard is the live control center for the machine and the services Serva manages.
+<img width="2205" height="1050" alt="Dashboard" src="https://github.com/user-attachments/assets/9b133198-d7f2-4390-b6e8-275014aa1c59" />
 
 It focuses on:
 
@@ -41,6 +42,7 @@ It focuses on:
 ### Services
 
 The Services screen separates running services, inactive saved services, and persistent data.
+<img width="2206" height="1045" alt="Services" src="https://github.com/user-attachments/assets/ebbdd18f-b37c-409f-8bd1-528b741ee0f6" />
 
 It is designed to make the service lifecycle easier to understand:
 
@@ -56,6 +58,7 @@ This is where Serva becomes more than a container launcher. It treats data as a 
 ### Launch
 
 The Launch screen is the one-click app gallery.
+<img width="2206" height="1045" alt="Services" src="https://github.com/user-attachments/assets/62497853-e90b-4db1-b5cb-9ff4732506ad" />
 
 It includes:
 
