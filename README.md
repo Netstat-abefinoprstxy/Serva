@@ -19,6 +19,31 @@ The goal is not to replace Docker. The goal is to make Docker easier to live wit
 
 Serva is also rooted in a broader idea: people should be able to own the software and services they rely on. Instead of defaulting to bigger hosted platforms for everything, Serva tries to make home labs and personal infrastructure more accessible, more understandable, and more practical for everyday users.
 
+## Get Serva
+
+If you want to run Serva, you currently have two main options.
+
+### Microsoft Store
+
+Install Serva from the Microsoft Store:
+
+- [Microsoft Store web listing](https://apps.microsoft.com/store/detail/9N958R6C3QFM?cid=DevShareMCLPCS)
+- [Open in Microsoft Store](ms-windows-store://pdp/?productid=9N958R6C3QFM)
+
+### GitHub Releases
+
+You can also download a release from GitHub and run Serva directly.
+
+- [GitHub Releases](https://github.com/KaelanWillauer/Serva/releases)
+- [Latest Release](https://github.com/KaelanWillauer/Serva/releases/latest)
+
+For the manual release flow, start:
+
+- `serva.exe`
+- `sovereignd.exe`
+
+The desktop app uses the local `sovereignd` service as its backend control plane.
+
 ## Serva Application
 
 Serva is organized around a few core screens that cover the main self-hosting workflow.
