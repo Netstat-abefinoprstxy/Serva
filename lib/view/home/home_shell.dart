@@ -65,7 +65,9 @@ class _HomeTabbedShellState extends State<_HomeTabbedShell> {
         builder: (context, state) {
           MainLoaded? fallbackLoadedState;
           if (state is MainError &&
-              (_looksLikeDockerUnavailable(state.message) || _looksLikeVirtualizationIssue(state.message))) {
+              (_looksLikeBackendUnavailable(state.message) ||
+                  _looksLikeDockerUnavailable(state.message) ||
+                  _looksLikeVirtualizationIssue(state.message))) {
             fallbackLoadedState = MainLoaded(
               services: const [],
               definitions: const [],

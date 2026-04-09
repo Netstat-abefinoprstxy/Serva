@@ -1,5 +1,18 @@
 part of '../dashboard_screen.dart';
 
+bool _looksLikeBackendUnavailable(String? message) {
+  if (message == null || message.trim().isEmpty) {
+    return false;
+  }
+
+  final normalized = message.toLowerCase();
+  return normalized.contains('connection refused') ||
+      normalized.contains('actively refused') ||
+      normalized.contains('failed host lookup') ||
+      normalized.contains('socketexception') ||
+      normalized.contains('health check failed') && !normalized.contains('docker unavailable');
+}
+
 bool _looksLikeDockerUnavailable(String? message) {
   if (message == null || message.trim().isEmpty) {
     return false;
@@ -7,9 +20,6 @@ bool _looksLikeDockerUnavailable(String? message) {
 
   final normalized = message.toLowerCase();
   return normalized.contains('docker') ||
-      normalized.contains('health check failed') ||
-      normalized.contains('connection refused') ||
-      normalized.contains('actively refused') ||
       normalized.contains('daemon not reachable');
 }
 

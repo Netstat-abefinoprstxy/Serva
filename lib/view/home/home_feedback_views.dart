@@ -28,6 +28,7 @@ class _ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final backendUnavailable = _looksLikeBackendUnavailable(message);
     final dockerUnavailable = _looksLikeDockerUnavailable(message);
     final virtualizationIssue = _looksLikeVirtualizationIssue(message);
 
@@ -42,6 +43,8 @@ class _ErrorView extends StatelessWidget {
             Text(
               virtualizationIssue
                   ? 'Docker Desktop needs virtualization enabled to run.\n\nTurn on virtualization in Windows and, if needed, enable virtualization in your BIOS/UEFI settings first, then retry.'
+                  : backendUnavailable
+                  ? 'Serva could not reach its local backend service.\n\nIf you are running a debug build, start `sovereignd.exe` manually first. In packaged builds, restart Serva and retry.'
                   : dockerUnavailable
                   ? 'Docker Desktop is required before Serva can manage services.\n\nInstall or start Docker Desktop, then retry.'
                   : message,
@@ -67,7 +70,7 @@ class _ErrorView extends StatelessWidget {
             FilledButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
+              label: Text(backendUnavailable ? 'Retry backend' : 'Retry'),
             ),
           ],
         ),

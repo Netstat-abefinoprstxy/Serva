@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:serva/app_feedback.dart';
 import 'package:serva/api/go_models.dart';
 import 'package:serva/api/sovereign_api.dart';
+import 'package:serva/backend_launcher.dart';
 import 'package:serva/tailscale_auth.dart';
 
 import 'main_event.dart';
@@ -49,20 +50,51 @@ class MainBloc extends Bloc<MainEvent, MainState> {
     try {
       final snapshot = await _fetchSnapshot();
       emit(_loadedFromSnapshot(snapshot));
-    } catch (e) {
+    } catch (error) {
+      Object failure = error;
+      if (looksLikeBackendUnavailableError(failure)) {
+        final launchResult = await startBackendIfNeeded(allowInDebug: true);
+        if (launchResult.didRecover) {
+          try {
+            final snapshot = await _fetchSnapshot();
+            emit(
+              _loadedFromSnapshot(
+                snapshot,
+                lastMessage: launchResult.status == BackendLaunchStatus.started
+                    ? 'Started Serva backend.'
+                    : 'Serva backend is running.',
+              ),
+            );
+            return;
+          } catch (retryError) {
+            failure = Exception(
+              '${failure.toString()} Backend restart attempted but retry failed: $retryError',
+            );
+          }
+        } else if (launchResult.status == BackendLaunchStatus.notFound) {
+          failure = Exception(
+            '${failure.toString()} Serva also could not find `sovereignd.exe` to start automatically.',
+          );
+        } else if (launchResult.status == BackendLaunchStatus.failed) {
+          failure = Exception(
+            '${failure.toString()} Serva tried to start the backend but it did not become ready: ${launchResult.message}',
+          );
+        }
+      }
+
       if (previous is MainLoaded) {
         emit(
           MainLoaded(
             services: previous.services,
             definitions: previous.definitions,
             healthOk: previous.healthOk,
-            lastMessage: 'Refresh failed: $e',
+            lastMessage: 'Refresh failed: $failure',
           ),
         );
         return;
       }
 
-      emit(MainError(message: e.toString()));
+      emit(MainError(message: failure.toString()));
     }
   }
 

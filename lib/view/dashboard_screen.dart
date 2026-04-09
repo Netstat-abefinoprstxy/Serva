@@ -117,6 +117,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .length;
     final showDashboardSupportBanner =
         _forceDashboardVirtualizationPreview ||
+        _looksLikeBackendUnavailable(lastMessage) ||
         _looksLikeDockerUnavailable(lastMessage) ||
         _looksLikeVirtualizationIssue(lastMessage);
 

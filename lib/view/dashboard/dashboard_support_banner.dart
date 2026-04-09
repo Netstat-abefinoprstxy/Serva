@@ -9,10 +9,13 @@ class _DashboardSupportBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final backendUnavailable = _looksLikeBackendUnavailable(message);
     final virtualizationIssue = _looksLikeVirtualizationIssue(message);
     final dockerUnavailable = _looksLikeDockerUnavailable(message);
     final accent = virtualizationIssue
         ? const Color(0xFFFFC857)
+        : backendUnavailable
+        ? const Color(0xFFFF7B72)
         : const Color(0xFF4CC9F0);
 
     return Container(
@@ -26,7 +29,11 @@ class _DashboardSupportBanner extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
-            virtualizationIssue ? Icons.memory_rounded : Icons.download_rounded,
+            virtualizationIssue
+                ? Icons.memory_rounded
+                : backendUnavailable
+                ? Icons.settings_ethernet_rounded
+                : Icons.download_rounded,
             color: accent,
           ),
           SizedBox(width: 10 * scale),
@@ -37,6 +44,8 @@ class _DashboardSupportBanner extends StatelessWidget {
                 Text(
                   virtualizationIssue
                       ? 'Virtualization may be required'
+                      : backendUnavailable
+                      ? 'Serva backend unavailable'
                       : 'Docker Desktop may be required',
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontSize:
@@ -48,6 +57,8 @@ class _DashboardSupportBanner extends StatelessWidget {
                 Text(
                   virtualizationIssue
                       ? 'Docker Desktop needs virtualization enabled to run. You may need to enable virtualization in Windows and in your BIOS/UEFI settings.'
+                      : backendUnavailable
+                      ? 'Serva could not reach its local Go service. If this is a debug build, start `sovereignd.exe` manually. Otherwise restart Serva and try again.'
                       : 'Serva could not reach Docker Desktop. Install it or make sure it is running, then refresh the dashboard.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     fontSize:

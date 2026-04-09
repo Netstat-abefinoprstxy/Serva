@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.3+3
+version: 1.0.4+1
 
 environment:
   sdk: ^3.8.1
@@ -46,7 +46,7 @@ msix_config:
   publisher_display_name: Netstat
   identity_name: Netstat.Serva
   publisher: CN=D2749BB3-3A15-4469-B2DC-E69B344AE8C6
-  msix_version: 1.0.3.0
+  msix_version: 1.0.4.0
   logo_path: windows/runner/resources/app_icon.png
   store: true
   install_certificate: false

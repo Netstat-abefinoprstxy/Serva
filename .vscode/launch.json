@@ -5,18 +5,13 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "sovereign",
-            "request": "launch",
-            "type": "dart"
-        },
-        {
-            "name": "sovereign (profile mode)",
+            "name": "Serva Debug",
             "request": "launch",
             "type": "dart",
-            "flutterMode": "profile"
+            "flutterMode": "debug"
         },
         {
-            "name": "sovereign (release mode)",
+            "name": "Serva Release",
             "request": "launch",
             "type": "dart",
             "flutterMode": "release"
