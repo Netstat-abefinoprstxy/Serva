@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:serva/api/go_models.dart';
 import 'package:serva/api/sovereign_api.dart';
 import 'package:url_launcher/url_launcher.dart';

@@ -32,11 +32,33 @@ class _HomeTabbedShell extends StatefulWidget {
 class _HomeTabbedShellState extends State<_HomeTabbedShell> {
   int _currentIndex = 0;
   bool _legacyModeEnabled = false;
+  String _appVersion = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      if (!mounted) return;
+      setState(() {
+        _appVersion = packageInfo.version.trim();
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _appVersion = '';
+      });
+    }
+  }
 
   String get _title {
     switch (_currentIndex) {
       case 0:
-        return 'Serva Dashboard';
+        return _appVersion.isEmpty ? 'Serva' : 'Serva $_appVersion';
       case 1:
         return 'Serva Services';
       case 2:

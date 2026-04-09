@@ -39,6 +39,9 @@ bool _looksLikeVirtualizationIssue(String? message) {
       normalized.contains('wsl') ||
       normalized.contains('bios') ||
       normalized.contains('uefi') ||
+      normalized.contains('virtualization support not detected') ||
+      normalized.contains('failed to start because virtualization') ||
+      normalized.contains('docker desktop is unable to start') ||
       normalized.contains('hardware assisted virtualization') ||
       normalized.contains('required feature is not installed') ||
       normalized.contains('vmx') ||
