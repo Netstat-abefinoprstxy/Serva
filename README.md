@@ -1,5 +1,6 @@
 # Serva
 
+People should own the software and services they rely on.
 Serva is an open source Windows desktop app for durable local self-hosting with Docker.
 
 It gives Windows users a friendlier way to launch, inspect, recreate, and manage Docker-powered services without losing track of the data those services depend on.
